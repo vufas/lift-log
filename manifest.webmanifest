@@ -1,0 +1,23 @@
+{
+  "name": "Lift Log",
+  "short_name": "Lift Log",
+  "description": "Local-first workout routine and set tracker.",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#f4f0e9",
+  "theme_color": "#1f4f46",
+  "icons": [
+    {
+      "src": "icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icons/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
