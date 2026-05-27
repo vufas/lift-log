@@ -53,7 +53,7 @@ const defaultConfig = {
       name: "Lower B",
       exercises: [
         { name: "Mobility warmup", sets: 0, targetReps: "Dynamic Hamstring Sweep Stretch - 5 reps/side; Hip Airplanes - 3-4 reps/side; Cossack Squat Side Shifts - 6 reps total; Cat-Cow into Neutral Spine Holds - 30s flow; Good Morning with PVC / Empty Bar - 6-8 reps", targetWeight: "", restSeconds: 0, trackProgress: false },
-        { name: "BSS", sets: 2, targetReps: "8-10", targetWeight: "", restSeconds: 90 },
+        { name: "BSS", sets: 2, targetReps: "8-10", targetWeight: "", restSeconds: 90, isUnilateral: true },
         { name: "PJR Pullover", sets: 2, targetReps: "10-12", targetWeight: "", restSeconds: 90 },
         { name: "Seated calf", sets: 3, targetReps: "", targetWeight: "", restSeconds: 75 },
         {
@@ -61,7 +61,7 @@ const defaultConfig = {
           alternate: "perWorkout",
           variants: [
             { name: "Two-handed KB swings", sets: 2, targetReps: "15-20", targetWeight: "", restSeconds: 75 },
-            { name: "One-handed KB swings", sets: 2, targetReps: "15-20", targetWeight: "", restSeconds: 75 }
+            { name: "One-handed KB swings", sets: 2, targetReps: "15-20", targetWeight: "", restSeconds: 75, isUnilateral: true }
           ]
         },
         { name: "Dragon Flag", sets: 2, targetReps: "AMRAP", targetWeight: "", restSeconds: 60 },
@@ -83,7 +83,7 @@ const defaultConfig = {
           alternate: "perWorkout",
           variants: [
             { name: "Weighted farmer's carry", sets: 2, targetReps: "50m+", targetWeight: "", restSeconds: 90 },
-            { name: "Suitcase carry", sets: 2, targetReps: "50m+", targetWeight: "", restSeconds: 90 }
+            { name: "Suitcase carry", sets: 2, targetReps: "50m+", targetWeight: "", restSeconds: 90, isUnilateral: true }
           ]
         }
       ]
@@ -118,7 +118,9 @@ let timer = {
   startedAt: 0,
   endsAt: 0,
   totalSeconds: 0,
-  label: ""
+  label: "",
+  exerciseId: "",
+  nextSetIndex: -1
 };
 
 const dom = {};
@@ -149,10 +151,6 @@ function bindDom() {
     deloadEnabled: document.querySelector("#deloadEnabled"),
     deloadEvery: document.querySelector("#deloadEvery"),
     deloadReduction: document.querySelector("#deloadReduction"),
-    timerDisplay: document.querySelector("#timerDisplay"),
-    timerProgress: document.querySelector("#timerProgress"),
-    timerMessage: document.querySelector("#timerMessage"),
-    timerStopBtn: document.querySelector("#timerStopBtn")
   });
 }
 
@@ -180,8 +178,6 @@ function bindEvents() {
   dom.exportBtn.addEventListener("click", exportBackup);
   dom.importInput.addEventListener("change", importBackup);
   dom.clearHistoryBtn.addEventListener("click", clearHistory);
-  dom.timerStopBtn.addEventListener("click", stopTimer);
-
   dom.unitSelect.addEventListener("change", () => {
     state.config.units = dom.unitSelect.value;
     persist();
@@ -230,6 +226,7 @@ function normalizeConfig(config) {
     config = defaultConfig;
   }
   config = migrateExerciseVariants(config);
+  config = migrateUnilateralFields(config);
 
   const merged = {
     ...structuredClone(defaultConfig),
@@ -285,7 +282,7 @@ function migrateExerciseVariants(config) {
         alternate: "perWorkout",
         variants: [
           { name: "Two-handed KB swings", sets: 2, targetReps: "15-20", targetWeight: "", restSeconds: 75 },
-          { name: "One-handed KB swings", sets: 2, targetReps: "15-20", targetWeight: "", restSeconds: 75 }
+          { name: "One-handed KB swings", sets: 2, targetReps: "15-20", targetWeight: "", restSeconds: 75, isUnilateral: true }
         ]
       }
     ],
@@ -296,7 +293,7 @@ function migrateExerciseVariants(config) {
         alternate: "perWorkout",
         variants: [
           { name: "Weighted farmer's carry", sets: 2, targetReps: "50m+", targetWeight: "", restSeconds: 90 },
-          { name: "Suitcase carry", sets: 2, targetReps: "50m+", targetWeight: "", restSeconds: 90 }
+          { name: "Suitcase carry", sets: 2, targetReps: "50m+", targetWeight: "", restSeconds: 90, isUnilateral: true }
         ]
       }
     ]
@@ -309,6 +306,36 @@ function migrateExerciseVariants(config) {
       : []
   }));
   return migrated;
+}
+
+function migrateUnilateralFields(config) {
+  const migrated = structuredClone(config);
+  if (!Array.isArray(migrated.workouts)) return migrated;
+
+  migrated.workouts = migrated.workouts.map((workout) => ({
+    ...workout,
+    exercises: Array.isArray(workout.exercises) ? workout.exercises.map(migrateExerciseUnilateralField) : []
+  }));
+  return migrated;
+}
+
+function migrateExerciseUnilateralField(exercise) {
+  const migrated = migrateSingleExerciseUnilateralField(exercise);
+  if (migrated && typeof migrated === "object" && Array.isArray(migrated.variants)) {
+    migrated.variants = migrated.variants.map(migrateSingleExerciseUnilateralField);
+  }
+  return migrated;
+}
+
+function migrateSingleExerciseUnilateralField(exercise) {
+  if (!exercise || typeof exercise !== "object") return exercise;
+  if (!Object.hasOwn(exercise, "unilateral") || Object.hasOwn(exercise, "isUnilateral")) return exercise;
+
+  const { unilateral, ...rest } = exercise;
+  return {
+    ...rest,
+    isUnilateral: Boolean(unilateral)
+  };
 }
 
 function persist() {
@@ -487,13 +514,38 @@ function createSessionExercise(workoutName, exercise) {
     targetWeight: resolvedExercise.targetWeight || "",
     restSeconds: Number(resolvedExercise.restSeconds || 0),
     trackProgress: resolvedExercise.trackProgress !== false,
+    isUnilateral: isExerciseUnilateral(resolvedExercise),
     skipped: false,
-    sets: resolvedExercise.trackProgress === false ? [] : Array.from({ length: Number(resolvedExercise.sets || 1) }, () => ({
-      reps: "",
-      weight: resolvedExercise.targetWeight || "",
-      effort: ""
-    }))
+    sets: resolvedExercise.trackProgress === false ? [] : Array.from({ length: Number(resolvedExercise.sets || 1) }, () => createEmptySet(resolvedExercise))
   };
+}
+
+function createEmptySet(exercise) {
+  const base = {
+    reps: "",
+    weight: exercise.targetWeight || "",
+    effort: "",
+    notes: ""
+  };
+
+  if (!isExerciseUnilateral(exercise)) return base;
+  return {
+    ...base,
+    leftWeight: exercise.targetWeight || "",
+    leftReps: "",
+    rightWeight: exercise.targetWeight || "",
+    rightReps: ""
+  };
+}
+
+function isExerciseUnilateral(exercise) {
+  if (typeof exercise?.isUnilateral === "boolean") return exercise.isUnilateral;
+  if (typeof exercise?.unilateral === "boolean") return exercise.unilateral;
+  return looksUnilateral(exercise?.name);
+}
+
+function looksUnilateral(name) {
+  return /\b(bss|split squat|single[- ]?leg|one[- ]?handed|one[- ]?arm|suitcase|per side|\/side)\b/i.test(name || "");
 }
 
 function createId() {
@@ -565,16 +617,12 @@ function renderActiveSession() {
 }
 
 function renderExercise(exercise, exerciseIndex) {
+  exercise.isUnilateral = isExerciseUnilateral(exercise);
   const template = document.querySelector("#exerciseTemplate");
   const node = template.content.firstElementChild.cloneNode(true);
   node.classList.toggle("skipped", Boolean(exercise.skipped));
   node.querySelector("h3").textContent = exercise.name;
   node.querySelector(".exercise-target").textContent = getExerciseTargetText(exercise);
-
-  const previousLog = renderPreviousExerciseLog(exercise);
-  if (previousLog) {
-    node.querySelector(".exercise-head").after(previousLog);
-  }
 
   node.querySelector(".skip-exercise").addEventListener("click", () => {
     exercise.skipped = !exercise.skipped;
@@ -595,11 +643,41 @@ function renderExercise(exercise, exerciseIndex) {
     noTrack.textContent = "Do this warmup without logging sets.";
     sets.append(noTrack);
   } else {
+    const timerNode = renderExerciseTimer(exercise);
+    if (timerNode) sets.append(timerNode);
+
+    const previous = findPreviousExerciseLog(exercise);
     exercise.sets.forEach((set, setIndex) => {
-      sets.append(renderSetRow(exercise, exerciseIndex, set, setIndex));
+      sets.append(renderSetRow(exercise, exerciseIndex, set, setIndex, previous?.exercise?.sets?.[setIndex]));
     });
   }
   return node;
+}
+
+function renderExerciseTimer(exercise) {
+  if (!timer.totalSeconds || timer.exerciseId !== exercise.id) return null;
+
+  const remainingSeconds = getTimerRemainingSeconds();
+  const panel = document.createElement("div");
+  panel.className = "exercise-timer";
+  panel.innerHTML = `
+    <div class="exercise-timer-head">
+      <div>
+        <p class="section-label">Rest timer</p>
+        <h4 data-timer-display>${formatClock(remainingSeconds)}</h4>
+      </div>
+      <button class="icon-button subtle" type="button" aria-label="Stop timer" title="Stop timer">
+        <span aria-hidden="true">■</span>
+      </button>
+    </div>
+    <div class="timer-bar" aria-hidden="true"><span data-timer-progress></span></div>
+    <p class="muted" data-timer-message>${escapeHtml(getTimerMessage(remainingSeconds))}</p>
+  `;
+  panel.querySelector("button").addEventListener("click", () => {
+    stopTimer();
+    renderActiveSession();
+  });
+  return panel;
 }
 
 function getExerciseTargetText(exercise) {
@@ -616,36 +694,6 @@ function getExerciseTargetText(exercise) {
   return pieces.join(" · ");
 }
 
-function renderPreviousExerciseLog(exercise) {
-  if (exercise.trackProgress === false || !state.activeSession) return null;
-
-  const previous = findPreviousExerciseLog(exercise);
-  const previousSession = previous?.session;
-  const previousExercise = previous?.exercise;
-  if (!previousSession || !previousExercise) return null;
-
-  const completedSets = previousExercise.sets.filter(isSetComplete);
-  if (!completedSets.length) return null;
-
-  const container = document.createElement("div");
-  container.className = "previous-log";
-
-  const title = document.createElement("p");
-  title.className = "previous-log-title";
-  title.textContent = `Last time · ${formatDate(previousSession.completedAt || previousSession.startedAt)}`;
-  container.append(title);
-
-  const list = document.createElement("div");
-  list.className = "previous-set-list";
-  completedSets.forEach((set, index) => {
-    const item = document.createElement("span");
-    item.textContent = `${index + 1}: ${formatSetSummary(set, previousSession.units || state.config.units)}`;
-    list.append(item);
-  });
-  container.append(list);
-  return container;
-}
-
 function findPreviousExerciseLog(exercise) {
   for (const session of state.history) {
     if (session.workoutName !== state.activeSession.workoutName) continue;
@@ -660,10 +708,23 @@ function findPreviousExerciseLog(exercise) {
 
 function formatSetSummary(set, units) {
   const parts = [];
-  if (set.weight) parts.push(`${set.weight} ${units}`);
-  if (set.reps) parts.push(`${set.reps} reps`);
+  if (set.leftWeight || set.leftReps || set.rightWeight || set.rightReps) {
+    parts.push(`L ${formatSideSummary(set.leftWeight, set.leftReps, units)}`);
+    parts.push(`R ${formatSideSummary(set.rightWeight, set.rightReps, units)}`);
+  } else {
+    if (set.weight) parts.push(`${set.weight} ${units}`);
+    if (set.reps) parts.push(`${set.reps} reps`);
+  }
   if (set.effort) parts.push(set.effort);
+  if (set.notes) parts.push(set.notes);
   return parts.join(" · ");
+}
+
+function formatSideSummary(weight, reps, units) {
+  const parts = [];
+  if (weight) parts.push(`${weight} ${units}`);
+  if (reps) parts.push(`${reps} reps`);
+  return parts.join(", ") || "-";
 }
 
 function renderExerciseEditor(container, exercise, exerciseIndex) {
@@ -695,19 +756,58 @@ function renderExerciseEditor(container, exercise, exerciseIndex) {
 function resizeSets(exercise, desiredCount) {
   const count = Math.max(1, Math.min(12, desiredCount));
   while (exercise.sets.length < count) {
-    exercise.sets.push({ reps: "", weight: exercise.targetWeight || "", effort: "" });
+    exercise.sets.push(createEmptySet(exercise));
   }
   exercise.sets = exercise.sets.slice(0, count);
 }
 
-function renderSetRow(exercise, exerciseIndex, set, setIndex) {
+function renderSetRow(exercise, exerciseIndex, set, setIndex, previousSet) {
   const row = document.createElement("div");
-  row.className = "set-row";
+  row.className = exercise.isUnilateral ? "set-row unilateral" : "set-row";
   row.classList.toggle("complete", isSetComplete(set));
-  row.innerHTML = `
-    <span class="set-number">${setIndex + 1}</span>
-    <input inputmode="decimal" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} weight" placeholder="${state.config.units}" value="${escapeAttr(set.weight)}">
-    <input inputmode="numeric" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} reps" placeholder="reps" value="${escapeAttr(set.reps)}">
+
+  if (exercise.isUnilateral) {
+    row.innerHTML = `
+      <span class="set-number">${setIndex + 1}</span>
+      <div class="side-fields" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} left side">
+        <span>Left</span>
+        <input data-field="leftWeight" inputmode="decimal" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} left weight" placeholder="${escapeAttr(getLastPlaceholder(previousSet, "leftWeight", state.config.units))}" value="${escapeAttr(set.leftWeight || "")}">
+        <input data-field="leftReps" inputmode="numeric" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} left reps" placeholder="${escapeAttr(getLastPlaceholder(previousSet, "leftReps", "reps"))}" value="${escapeAttr(set.leftReps || "")}">
+      </div>
+      <div class="side-fields" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} right side">
+        <span>Right</span>
+        <input data-field="rightWeight" inputmode="decimal" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} right weight" placeholder="${escapeAttr(getLastPlaceholder(previousSet, "rightWeight", state.config.units))}" value="${escapeAttr(set.rightWeight || "")}">
+        <input data-field="rightReps" inputmode="numeric" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} right reps" placeholder="${escapeAttr(getLastPlaceholder(previousSet, "rightReps", "reps"))}" value="${escapeAttr(set.rightReps || "")}">
+      </div>
+      ${renderSetTail(exercise, set, setIndex, previousSet)}
+    `;
+
+    bindSetField(row, "leftWeight", exerciseIndex, setIndex);
+    bindSetField(row, "leftReps", exerciseIndex, setIndex, true);
+    bindSetField(row, "rightWeight", exerciseIndex, setIndex);
+    bindSetField(row, "rightReps", exerciseIndex, setIndex, true);
+  } else {
+    row.innerHTML = `
+      <span class="set-number">${setIndex + 1}</span>
+      <input data-field="weight" inputmode="decimal" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} weight" placeholder="${escapeAttr(getLastPlaceholder(previousSet, "weight", state.config.units))}" value="${escapeAttr(set.weight || "")}">
+      <input data-field="reps" inputmode="numeric" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} reps" placeholder="${escapeAttr(getLastPlaceholder(previousSet, "reps", "reps"))}" value="${escapeAttr(set.reps || "")}">
+      ${renderSetTail(exercise, set, setIndex, previousSet)}
+    `;
+
+    bindSetField(row, "weight", exerciseIndex, setIndex);
+    bindSetField(row, "reps", exerciseIndex, setIndex, true);
+  }
+
+  bindSetField(row, "notes", exerciseIndex, setIndex);
+  const effortSelect = row.querySelector("select");
+  effortSelect.value = set.effort || "";
+  effortSelect.addEventListener("change", () => updateSet(exerciseIndex, setIndex, "effort", effortSelect.value));
+  return row;
+}
+
+function renderSetTail(exercise, set, setIndex, previousSet) {
+  return `
+    <textarea data-field="notes" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} notes" placeholder="${escapeAttr(getLastPlaceholder(previousSet, "notes", "notes"))}">${escapeHtml(set.notes || "")}</textarea>
     <select aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} effort">
       <option value="">Expected</option>
       <option value="easy">Easy</option>
@@ -715,15 +815,24 @@ function renderSetRow(exercise, exerciseIndex, set, setIndex) {
       <option value="failed">Failed</option>
     </select>
   `;
+}
 
-  const [weightInput, repsInput] = row.querySelectorAll("input");
-  const effortSelect = row.querySelector("select");
-  effortSelect.value = set.effort || "";
+function bindSetField(row, field, exerciseIndex, setIndex, maybeStartRest = false) {
+  const input = row.querySelector(`[data-field="${field}"]`);
+  if (!input) return;
+  input.addEventListener("change", () => updateSet(exerciseIndex, setIndex, field, input.value, maybeStartRest));
+}
 
-  weightInput.addEventListener("change", () => updateSet(exerciseIndex, setIndex, "weight", weightInput.value));
-  repsInput.addEventListener("change", () => updateSet(exerciseIndex, setIndex, "reps", repsInput.value, true));
-  effortSelect.addEventListener("change", () => updateSet(exerciseIndex, setIndex, "effort", effortSelect.value));
-  return row;
+function getLastPlaceholder(previousSet, field, fallback) {
+  const value = previousSet?.[field] || getLegacyPreviousValue(previousSet, field);
+  return value ? `Last: ${value}${field.toLowerCase().includes("weight") ? ` ${state.config.units}` : ""}` : fallback;
+}
+
+function getLegacyPreviousValue(previousSet, field) {
+  if (!previousSet) return "";
+  if (field === "leftWeight" || field === "rightWeight") return previousSet.weight || "";
+  if (field === "leftReps" || field === "rightReps") return previousSet.reps || "";
+  return "";
 }
 
 function updateSet(exerciseIndex, setIndex, field, value, maybeStartRest = false) {
@@ -736,12 +845,16 @@ function updateSet(exerciseIndex, setIndex, field, value, maybeStartRest = false
   renderActiveSession();
 
   if (maybeStartRest && !wasComplete && isNowComplete && hasMoreSets(exercise, setIndex) && exercise.restSeconds > 0) {
-    startTimer(exercise.restSeconds, `${exercise.name}: set ${setIndex + 2}`);
+    startTimer(exercise.restSeconds, `${exercise.name}: set ${setIndex + 2}`, exercise.id, setIndex + 1);
   }
 }
 
 function isSetComplete(set) {
-  return String(set.reps || "").trim() !== "" || String(set.effort || "").trim() !== "";
+  const hasEffortOrNotes = [set.effort, set.notes].some((value) => String(value || "").trim() !== "");
+  if ("leftReps" in set || "rightReps" in set) {
+    return hasEffortOrNotes || (String(set.leftReps || "").trim() !== "" && String(set.rightReps || "").trim() !== "");
+  }
+  return hasEffortOrNotes || String(set.reps || "").trim() !== "";
 }
 
 function hasMoreSets(exercise, setIndex) {
@@ -772,26 +885,25 @@ function cancelSession() {
   renderAll();
 }
 
-function startTimer(seconds, label) {
+function startTimer(seconds, label, exerciseId, nextSetIndex) {
   stopTimer(false);
   timer = {
     intervalId: null,
     startedAt: Date.now(),
     endsAt: Date.now() + seconds * 1000,
     totalSeconds: seconds,
-    label
+    label,
+    exerciseId,
+    nextSetIndex
   };
   timer.intervalId = window.setInterval(tickTimer, 250);
+  renderActiveSession();
   tickTimer();
 }
 
 function tickTimer() {
-  const remainingMs = Math.max(0, timer.endsAt - Date.now());
-  const remainingSeconds = Math.ceil(remainingMs / 1000);
-  dom.timerDisplay.textContent = formatClock(remainingSeconds);
-  dom.timerMessage.textContent = remainingSeconds > 0 ? `Next: ${timer.label}` : "Rest complete. Start the next set.";
-  const elapsed = timer.totalSeconds ? 1 - remainingSeconds / timer.totalSeconds : 1;
-  dom.timerProgress.style.width = `${Math.min(100, Math.max(0, elapsed * 100))}%`;
+  const remainingSeconds = getTimerRemainingSeconds();
+  updateTimerDom(remainingSeconds);
 
   if (remainingSeconds <= 0) {
     window.clearInterval(timer.intervalId);
@@ -800,12 +912,34 @@ function tickTimer() {
   }
 }
 
+function getTimerRemainingSeconds() {
+  if (!timer.endsAt) return 0;
+  return Math.ceil(Math.max(0, timer.endsAt - Date.now()) / 1000);
+}
+
+function getTimerMessage(remainingSeconds) {
+  return remainingSeconds > 0 ? `Next: ${timer.label}` : "Rest complete. Start the next set.";
+}
+
+function updateTimerDom(remainingSeconds = getTimerRemainingSeconds()) {
+  const timerPanel = document.querySelector(".exercise-timer");
+  if (!timerPanel) return;
+
+  const display = timerPanel.querySelector("[data-timer-display]");
+  const message = timerPanel.querySelector("[data-timer-message]");
+  const progress = timerPanel.querySelector("[data-timer-progress]");
+  if (display) display.textContent = formatClock(remainingSeconds);
+  if (message) message.textContent = getTimerMessage(remainingSeconds);
+  const elapsed = timer.totalSeconds ? 1 - remainingSeconds / timer.totalSeconds : 1;
+  if (progress) progress.style.width = `${Math.min(100, Math.max(0, elapsed * 100))}%`;
+}
+
 function stopTimer(resetMessage = true) {
   if (timer.intervalId) window.clearInterval(timer.intervalId);
-  timer = { intervalId: null, startedAt: 0, endsAt: 0, totalSeconds: 0, label: "" };
-  dom.timerDisplay.textContent = "00:00";
-  dom.timerProgress.style.width = "0%";
-  if (resetMessage) dom.timerMessage.textContent = "Timer starts after a set when more sets remain.";
+  timer = { intervalId: null, startedAt: 0, endsAt: 0, totalSeconds: 0, label: "", exerciseId: "", nextSetIndex: -1 };
+  if (resetMessage) {
+    document.querySelector(".exercise-timer")?.remove();
+  }
 }
 
 function vibrate() {
@@ -846,11 +980,7 @@ function renderHistoryDetails(session) {
       const sets = exercise.sets
         .filter(isSetComplete)
         .map((set, index) => {
-          const parts = [];
-          if (set.weight) parts.push(`${escapeHtml(set.weight)} ${escapeHtml(state.config.units)}`);
-          if (set.reps) parts.push(`${escapeHtml(set.reps)} reps`);
-          if (set.effort) parts.push(escapeHtml(set.effort));
-          return `<span>${index + 1}: ${parts.join(", ")}</span>`;
+          return `<span>${index + 1}: ${escapeHtml(formatSetSummary(set, session.units || state.config.units))}</span>`;
         })
         .join("");
 

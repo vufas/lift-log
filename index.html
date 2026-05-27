@@ -48,19 +48,6 @@
               </div>
             </article>
 
-            <article class="panel timer-panel" id="timerPanel">
-              <div class="panel-header">
-                <div>
-                  <p class="section-label">Rest timer</p>
-                  <h2 id="timerDisplay">00:00</h2>
-                </div>
-                <button id="timerStopBtn" class="icon-button subtle" type="button" aria-label="Stop timer" title="Stop timer">
-                  <span aria-hidden="true">■</span>
-                </button>
-              </div>
-              <div class="timer-bar" aria-hidden="true"><span id="timerProgress"></span></div>
-              <p id="timerMessage" class="muted">Timer starts after a set when more sets remain.</p>
-            </article>
           </div>
 
           <div id="activeSession" class="session hidden"></div>
@@ -88,7 +75,7 @@
               </div>
               <button id="saveConfigBtn" class="primary-button compact" type="button">Save</button>
             </div>
-            <p class="muted tight">Edit the JSON below to change workouts, schedule groups, default sets, targets, and rest time.</p>
+            <p class="muted tight">Edit the JSON below to change workouts, schedule groups, default sets, targets, rest time, and isUnilateral.</p>
             <textarea id="configEditor" spellcheck="false" aria-label="Routine configuration"></textarea>
             <p id="configStatus" class="status-line" role="status"></p>
           </div>

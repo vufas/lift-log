@@ -238,8 +238,24 @@ main {
   border-color: rgba(31, 111, 91, 0.24);
 }
 
-#timerDisplay {
+.exercise-timer h4 {
+  margin: 0;
+  font-size: 1.5rem;
   font-variant-numeric: tabular-nums;
+}
+
+.exercise-timer {
+  border: 1px solid rgba(31, 111, 91, 0.24);
+  border-radius: 8px;
+  background: var(--accent-soft);
+  padding: 12px;
+}
+
+.exercise-timer-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 
 .timer-bar {
@@ -337,40 +353,36 @@ main {
   margin-top: 12px;
 }
 
-.previous-log {
-  margin-top: 12px;
-  border-top: 1px solid var(--line);
-  padding-top: 10px;
+.set-row {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) minmax(0, 1fr) minmax(140px, 1.25fr) 108px;
+  gap: 8px;
+  align-items: center;
 }
 
-.previous-log-title {
-  margin: 0 0 8px;
+.set-row.unilateral {
+  grid-template-columns: 30px minmax(0, 1fr) minmax(0, 1fr) 108px;
+}
+
+.set-row.unilateral textarea {
+  grid-column: 2 / span 2;
+}
+
+.set-row.unilateral select {
+  grid-column: 4;
+}
+
+.side-fields {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+}
+
+.side-fields span {
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 800;
-  text-transform: uppercase;
-}
-
-.previous-set-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.previous-set-list span {
-  border-radius: 999px;
-  background: #ece5dc;
-  color: var(--ink);
-  padding: 5px 8px;
-  font-size: 0.84rem;
-  font-weight: 700;
-}
-
-.set-row {
-  display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) minmax(0, 1fr) 108px;
-  gap: 8px;
-  align-items: center;
 }
 
 .set-number {
@@ -386,12 +398,18 @@ main {
 }
 
 .set-row input,
-.set-row select {
+.set-row select,
+.set-row textarea {
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface-strong);
   padding: 8px;
+}
+
+.set-row textarea {
+  min-height: 44px;
+  resize: vertical;
 }
 
 .set-row.complete .set-number {
@@ -543,10 +561,6 @@ main {
     padding-top: 28px;
   }
 
-  .today-grid {
-    grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.65fr);
-  }
-
   .session-summary {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
@@ -576,8 +590,19 @@ main {
     grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1fr);
   }
 
+  .set-row textarea,
   .set-row select {
     grid-column: 2 / span 2;
+  }
+
+  .set-row.unilateral {
+    grid-template-columns: 28px minmax(0, 1fr);
+  }
+
+  .set-row.unilateral .side-fields,
+  .set-row.unilateral textarea,
+  .set-row.unilateral select {
+    grid-column: 2;
   }
 
   .current-workout select {
