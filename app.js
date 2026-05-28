@@ -137,6 +137,7 @@ function bindDom() {
     screenTitle: document.querySelector("#screenTitle"),
     nextWorkoutName: document.querySelector("#nextWorkoutName"),
     currentWorkoutCard: document.querySelector("#currentWorkoutCard"),
+    backupReminder: document.querySelector("#backupReminder"),
     workoutPicker: document.querySelector("#workoutPicker"),
     startWorkoutBtn: document.querySelector("#startWorkoutBtn"),
     resumeWorkoutBtn: document.querySelector("#resumeWorkoutBtn"),
@@ -146,6 +147,8 @@ function bindDom() {
     saveConfigBtn: document.querySelector("#saveConfigBtn"),
     configStatus: document.querySelector("#configStatus"),
     exportBtn: document.querySelector("#exportBtn"),
+    settingsExportBtn: document.querySelector("#settingsExportBtn"),
+    backupStatus: document.querySelector("#backupStatus"),
     importInput: document.querySelector("#importInput"),
     clearHistoryBtn: document.querySelector("#clearHistoryBtn"),
     unitSelect: document.querySelector("#unitSelect"),
@@ -177,6 +180,7 @@ function bindEvents() {
 
   dom.saveConfigBtn.addEventListener("click", saveConfigFromEditor);
   dom.exportBtn.addEventListener("click", exportBackup);
+  dom.settingsExportBtn.addEventListener("click", exportBackup);
   dom.importInput.addEventListener("change", importBackup);
   dom.clearHistoryBtn.addEventListener("click", clearHistory);
   dom.unitSelect.addEventListener("change", () => {
@@ -198,7 +202,9 @@ function loadState() {
       config: structuredClone(defaultConfig),
       history: [],
       activeSession: null,
-      selectedWorkoutName: defaultConfig.cycleOrder[0]
+      selectedWorkoutName: defaultConfig.cycleOrder[0],
+      lastBackupExportedAt: "",
+      backupReminderDismissedAt: ""
     };
   }
 
@@ -209,7 +215,9 @@ function loadState() {
       config: normalizeConfig(parsed.config || defaultConfig),
       history: Array.isArray(parsed.history) ? parsed.history : [],
       activeSession: parsed.activeSession || null,
-      selectedWorkoutName: parsed.selectedWorkoutName || getNextWorkoutName(parsed)
+      selectedWorkoutName: parsed.selectedWorkoutName || getNextWorkoutName(parsed),
+      lastBackupExportedAt: parsed.lastBackupExportedAt || "",
+      backupReminderDismissedAt: parsed.backupReminderDismissedAt || ""
     };
   } catch {
     return {
@@ -217,7 +225,9 @@ function loadState() {
       config: structuredClone(defaultConfig),
       history: [],
       activeSession: null,
-      selectedWorkoutName: defaultConfig.cycleOrder[0]
+      selectedWorkoutName: defaultConfig.cycleOrder[0],
+      lastBackupExportedAt: "",
+      backupReminderDismissedAt: ""
     };
   }
 }
@@ -388,6 +398,42 @@ function renderToday() {
 
   dom.nextWorkoutName.textContent = dom.workoutPicker.value;
   dom.resumeWorkoutBtn.classList.toggle("hidden", !state.activeSession);
+  renderBackupReminder();
+}
+
+function renderBackupReminder() {
+  if (!shouldShowBackupReminder()) {
+    dom.backupReminder.classList.add("hidden");
+    dom.backupReminder.innerHTML = "";
+    return;
+  }
+
+  const latest = state.history[0];
+  dom.backupReminder.classList.remove("hidden");
+  dom.backupReminder.innerHTML = `
+    <div>
+      <p class="section-label">Backup</p>
+      <h2>Workout not backed up</h2>
+      <p class="muted">Latest: ${escapeHtml(latest.workoutName)} on ${escapeHtml(formatDateTime(latest.completedAt || latest.startedAt))}</p>
+    </div>
+    <div class="session-actions">
+      <button class="secondary-button" type="button" data-action="dismiss-backup">Later</button>
+      <button class="primary-button" type="button" data-action="backup-now">Backup now</button>
+    </div>
+  `;
+  dom.backupReminder.querySelector('[data-action="backup-now"]').addEventListener("click", exportBackup);
+  dom.backupReminder.querySelector('[data-action="dismiss-backup"]').addEventListener("click", () => {
+    state.backupReminderDismissedAt = latest.completedAt;
+    persist();
+    renderBackupReminder();
+  });
+}
+
+function shouldShowBackupReminder() {
+  if (state.activeSession || !state.history.length) return false;
+  const latestCompletedAt = state.history[0]?.completedAt || state.history[0]?.startedAt || "";
+  if (!latestCompletedAt) return false;
+  return isAfter(latestCompletedAt, state.lastBackupExportedAt) && isAfter(latestCompletedAt, state.backupReminderDismissedAt);
 }
 
 function getNextWorkoutName(sourceState) {
@@ -1025,6 +1071,9 @@ function renderSettings() {
   dom.deloadEnabled.checked = Boolean(state.config.deload.enabled);
   dom.deloadEvery.value = state.config.deload.everyCycles;
   dom.deloadReduction.value = state.config.deload.targetReductionPercent;
+  dom.backupStatus.textContent = state.lastBackupExportedAt
+    ? `Last exported ${formatDateTime(state.lastBackupExportedAt)}`
+    : "No backup exported yet.";
 }
 
 function updateDeloadSettings() {
@@ -1039,16 +1088,22 @@ function updateDeloadSettings() {
 }
 
 function exportBackup() {
+  const exportedAt = new Date().toISOString();
+  state.lastBackupExportedAt = exportedAt;
+  persist();
+  renderToday();
+  renderSettings();
+
   const backup = {
-    exportedAt: new Date().toISOString(),
+    exportedAt,
     app: "Lift Log",
-    state
+    state: structuredClone(state)
   };
   const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `lift-log-backup-${new Date().toISOString().slice(0, 10)}.json`;
+  anchor.download = `lift-log-backup-${formatBackupFilenameDate(exportedAt)}.json`;
   document.body.append(anchor);
   anchor.click();
   anchor.remove();
@@ -1069,6 +1124,8 @@ function importBackup(event) {
       state.history = Array.isArray(importedState.history) ? importedState.history : [];
       state.activeSession = importedState.activeSession || null;
       state.selectedWorkoutName = importedState.selectedWorkoutName || getNextWorkoutName(state);
+      state.lastBackupExportedAt = importedState.lastBackupExportedAt || parsed.exportedAt || "";
+      state.backupReminderDismissedAt = importedState.backupReminderDismissedAt || "";
       persist();
       renderAll();
       window.alert("Backup imported.");
@@ -1119,6 +1176,16 @@ function formatClock(seconds) {
   const minutes = Math.floor(seconds / 60);
   const rest = seconds % 60;
   return `${String(minutes).padStart(2, "0")}:${String(rest).padStart(2, "0")}`;
+}
+
+function formatBackupFilenameDate(iso) {
+  return iso.replaceAll(":", "-").replace(/\.\d{3}Z$/, "Z");
+}
+
+function isAfter(leftIso, rightIso) {
+  if (!leftIso) return false;
+  if (!rightIso) return true;
+  return new Date(leftIso).getTime() > new Date(rightIso).getTime();
 }
 
 function escapeHtml(value) {

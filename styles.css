@@ -171,7 +171,8 @@ main {
 
 .panel,
 .exercise-card,
-.session-summary {
+.session-summary,
+.backup-reminder {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -294,11 +295,22 @@ main {
   padding: 16px;
 }
 
+.backup-reminder {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 16px;
+  border-color: rgba(154, 78, 31, 0.34);
+  background: #fff8ec;
+}
+
 .session-summary h2 {
   margin: 0;
 }
 
-.session-summary p {
+.session-summary p,
+.backup-reminder p,
+.backup-reminder h2 {
   margin: 0;
 }
 
@@ -511,6 +523,19 @@ main {
   font-weight: 750;
 }
 
+.backup-row {
+  align-items: start;
+}
+
+.backup-controls {
+  display: grid;
+  gap: 6px;
+}
+
+.backup-controls .primary-button {
+  width: 100%;
+}
+
 .checkbox-row input {
   justify-self: end;
   width: 28px;
@@ -562,6 +587,11 @@ main {
   }
 
   .session-summary {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+  }
+
+  .backup-reminder {
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
   }

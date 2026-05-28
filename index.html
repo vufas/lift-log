@@ -50,6 +50,7 @@
 
           </div>
 
+          <div id="backupReminder" class="backup-reminder hidden"></div>
           <div id="activeSession" class="session hidden"></div>
         </section>
 
@@ -90,6 +91,13 @@
               </div>
             </div>
             <div class="settings-grid">
+              <div class="setting-row backup-row">
+                <span>Backup</span>
+                <div class="backup-controls">
+                  <button id="settingsExportBtn" class="primary-button" type="button">Backup now</button>
+                  <p id="backupStatus" class="muted tight">No backup exported yet.</p>
+                </div>
+              </div>
               <label class="setting-row">
                 <span>Units</span>
                 <select id="unitSelect">
