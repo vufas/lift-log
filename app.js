@@ -136,6 +136,7 @@ function bindDom() {
   Object.assign(dom, {
     screenTitle: document.querySelector("#screenTitle"),
     nextWorkoutName: document.querySelector("#nextWorkoutName"),
+    currentWorkoutCard: document.querySelector("#currentWorkoutCard"),
     workoutPicker: document.querySelector("#workoutPicker"),
     startWorkoutBtn: document.querySelector("#startWorkoutBtn"),
     resumeWorkoutBtn: document.querySelector("#resumeWorkoutBtn"),
@@ -367,6 +368,7 @@ function renderToday() {
   const workouts = state.config.workouts;
   const nextName = getNextWorkoutName(state);
   const selected = state.selectedWorkoutName || nextName;
+  dom.currentWorkoutCard.classList.toggle("hidden", Boolean(state.activeSession));
 
   dom.workoutPicker.innerHTML = "";
   workouts.forEach((workout) => {
