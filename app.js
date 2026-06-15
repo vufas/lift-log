@@ -2,13 +2,13 @@ const STORAGE_KEY = "liftLogState.v1";
 
 const defaultConfig = {
   units: "lb",
-  cycleOrder: ["Upper A", "Z2", "Lower A", "HIIT - Erg", "Upper B", "Jog", "Lower B"],
+  cycleOrder: ["Upper A", "Z2", "Lower A", "HIIT - Erg", "Upper B", "Light HIIT and Z2", "Lower B"],
   schedule: {
     mode: "alternatingGroups",
     groupOrder: ["lift", "cardio"],
     groups: {
       lift: ["Upper A", "Lower A", "Upper B", "Lower B"],
-      cardio: ["Z2", "HIIT - Erg", "Jog"]
+      cardio: ["Z2", "HIIT - Erg", "Light HIIT and Z2"]
     }
   },
   deload: {
@@ -91,22 +91,22 @@ const defaultConfig = {
     {
       name: "HIIT - Erg",
       exercises: [
-        { name: "Warmup: Easy 50-60% effort", sets: 1, targetReps: "5m", targetWeight: "", restSeconds: 0 },
-        { name: "Norwegian 4x4", sets: 1, targetReps: "28m", targetWeight: "", restSeconds: 0 },
-        { name: "Zone 2 (60-70% HR max)", sets: 1, targetReps: "15m", targetWeight: "", restSeconds: 0 }
+        { name: "Warmup", type: "cardio", targetModality: "Erg", targetHrZone: "50-60% HR max", targetMinutes: "5" },
+        { name: "Norwegian 4x4", type: "cardio", targetModality: "Erg", targetHrZone: "Z4", targetMinutes: "16" },
+        { name: "Zone 2", type: "cardio", targetModality: "Erg", targetHrZone: "Z2", targetMinutes: "15" }
       ]
     },
     {
       name: "Z2",
       exercises: [
-        { name: "Z2 Cardio", sets: 1, targetReps: "60-75m", targetWeight: "", restSeconds: 0 }
+        { name: "Z2 Cardio", type: "cardio", targetModality: "", targetHrZone: "Z2", targetMinutes: "60-75" }
       ]
     },
     {
-      name: "Jog",
+      name: "Light HIIT and Z2",
       exercises: [
-        { name: "5K jog - 3x8-12 min tempo intervals with 2 min breaks. Z3-low 4", sets: 1, targetReps: "25-30m", targetWeight: "", restSeconds: 0 },
-        { name: "Easy Z2 jog", sets: 1, targetReps: "30m", targetWeight: "", restSeconds: 0 }
+        { name: "Light HIIT", type: "cardio", targetModality: "", targetHrZone: "Z3-low Z4", targetMinutes: "25-30" },
+        { name: "Zone 2", type: "cardio", targetModality: "", targetHrZone: "Z2", targetMinutes: "30" }
       ]
     }
   ]
@@ -210,12 +210,14 @@ function loadState() {
 
   try {
     const parsed = JSON.parse(raw);
+    const config = normalizeConfig(parsed.config || defaultConfig);
+    const history = Array.isArray(parsed.history) ? parsed.history.map(migrateSessionWorkoutName) : [];
     return {
       version: 1,
-      config: normalizeConfig(parsed.config || defaultConfig),
-      history: Array.isArray(parsed.history) ? parsed.history : [],
-      activeSession: parsed.activeSession || null,
-      selectedWorkoutName: parsed.selectedWorkoutName || getNextWorkoutName(parsed),
+      config,
+      history,
+      activeSession: parsed.activeSession ? migrateSessionWorkoutName(parsed.activeSession) : null,
+      selectedWorkoutName: renameWorkout(parsed.selectedWorkoutName) || getNextWorkoutName({ ...parsed, config, history }),
       lastBackupExportedAt: parsed.lastBackupExportedAt || "",
       backupReminderDismissedAt: parsed.backupReminderDismissedAt || ""
     };
@@ -238,6 +240,7 @@ function normalizeConfig(config) {
   }
   config = migrateExerciseVariants(config);
   config = migrateUnilateralFields(config);
+  config = migrateCardioWorkouts(config);
 
   const merged = {
     ...structuredClone(defaultConfig),
@@ -259,6 +262,99 @@ function normalizeConfig(config) {
     : merged.workouts.map((workout) => workout.name);
   merged.units = config.units || "lb";
   return merged;
+}
+
+function migrateCardioWorkouts(config) {
+  const migrated = structuredClone(config);
+  if (!Array.isArray(migrated.workouts)) return migrated;
+
+  migrated.cycleOrder = Array.isArray(migrated.cycleOrder)
+    ? migrated.cycleOrder.map(renameWorkout)
+    : migrated.cycleOrder;
+
+  if (migrated.schedule?.groups) {
+    migrated.schedule.groups = Object.fromEntries(
+      Object.entries(migrated.schedule.groups).map(([group, names]) => [
+        group,
+        Array.isArray(names) ? names.map(renameWorkout) : names
+      ])
+    );
+  }
+
+  const cardioNames = new Set(migrated.schedule?.groups?.cardio || ["Z2", "HIIT - Erg", "Light HIIT and Z2"]);
+  migrated.workouts = migrated.workouts.map((workout) => {
+    const name = renameWorkout(workout.name);
+    if (!cardioNames.has(name)) return { ...workout, name };
+
+    return {
+      ...workout,
+      name,
+      exercises: Array.isArray(workout.exercises)
+        ? workout.exercises.map((exercise) => migrateCardioExercise(name, exercise))
+        : []
+    };
+  });
+
+  return migrated;
+}
+
+function renameWorkout(name) {
+  return name === "Jog" ? "Light HIIT and Z2" : name;
+}
+
+function migrateCardioExercise(workoutName, exercise) {
+  if (exercise?.type === "cardio") {
+    return {
+      ...exercise,
+      name: migrateCardioExerciseName(workoutName, exercise.name)
+    };
+  }
+
+  const {
+    sets,
+    targetReps,
+    targetWeight,
+    restSeconds,
+    isUnilateral,
+    unilateral,
+    ...rest
+  } = exercise || {};
+  const text = `${exercise?.name || ""} ${targetReps || ""}`;
+
+  return {
+    ...rest,
+    name: migrateCardioExerciseName(workoutName, exercise?.name),
+    type: "cardio",
+    targetModality: inferCardioModality(workoutName, text),
+    targetHrZone: inferHrZone(text),
+    targetMinutes: inferTargetMinutes(text, targetReps)
+  };
+}
+
+function migrateCardioExerciseName(workoutName, name) {
+  if (workoutName !== "Light HIIT and Z2") return name || "Cardio";
+  if (/5k jog|tempo intervals/i.test(name || "")) return "Light HIIT";
+  if (/easy z2 jog/i.test(name || "")) return "Zone 2";
+  return name || "Cardio";
+}
+
+function inferCardioModality(workoutName, text) {
+  if (/erg/i.test(workoutName)) return "Erg";
+  if (/jog|run/i.test(text)) return "Running";
+  return "";
+}
+
+function inferHrZone(text) {
+  if (/50\s*-\s*60%/i.test(text)) return "50-60% HR max";
+  if (/norwegian|4x4/i.test(text)) return "Z4";
+  if (/z3|zone 3|tempo/i.test(text)) return "Z3-low Z4";
+  if (/\bz2\b|zone 2|60\s*-\s*70%/i.test(text)) return "Z2";
+  return "";
+}
+
+function inferTargetMinutes(text, targetReps) {
+  if (/norwegian|4x4/i.test(text)) return "16";
+  return String(targetReps || "").replace(/\s*m(?:in(?:utes?)?)?\s*$/i, "");
 }
 
 function shouldUseUpdatedDefaultConfig(config) {
@@ -553,6 +649,23 @@ function startSession(workoutName) {
 
 function createSessionExercise(workoutName, exercise) {
   const resolvedExercise = resolveExerciseVariant(workoutName, exercise);
+  if (resolvedExercise.type === "cardio") {
+    return {
+      id: createId(),
+      name: resolvedExercise.name,
+      sourceName: exercise.name,
+      type: "cardio",
+      targetModality: resolvedExercise.targetModality || "",
+      targetHrZone: resolvedExercise.targetHrZone || "",
+      targetMinutes: resolvedExercise.targetMinutes || "",
+      modality: resolvedExercise.targetModality || "",
+      hrZone: resolvedExercise.targetHrZone || "",
+      minutesInZone: "",
+      notes: "",
+      skipped: false
+    };
+  }
+
   return {
     id: createId(),
     name: resolvedExercise.name,
@@ -565,6 +678,13 @@ function createSessionExercise(workoutName, exercise) {
     isUnilateral: isExerciseUnilateral(resolvedExercise),
     skipped: false,
     sets: resolvedExercise.trackProgress === false ? [] : Array.from({ length: Number(resolvedExercise.sets || 1) }, () => createEmptySet(resolvedExercise))
+  };
+}
+
+function migrateSessionWorkoutName(session) {
+  return {
+    ...session,
+    workoutName: renameWorkout(session.workoutName)
   };
 }
 
@@ -665,6 +785,10 @@ function renderActiveSession() {
 }
 
 function renderExercise(exercise, exerciseIndex) {
+  if (exercise.type === "cardio") {
+    return renderCardioExercise(exercise, exerciseIndex);
+  }
+
   exercise.isUnilateral = isExerciseUnilateral(exercise);
   const template = document.querySelector("#exerciseTemplate");
   const node = template.content.firstElementChild.cloneNode(true);
@@ -702,6 +826,58 @@ function renderExercise(exercise, exerciseIndex) {
   return node;
 }
 
+function renderCardioExercise(exercise, exerciseIndex) {
+  const template = document.querySelector("#exerciseTemplate");
+  const node = template.content.firstElementChild.cloneNode(true);
+  node.classList.toggle("skipped", Boolean(exercise.skipped));
+  node.querySelector("h3").textContent = exercise.name;
+  node.querySelector(".exercise-target").textContent = getExerciseTargetText(exercise);
+
+  node.querySelector(".skip-exercise").addEventListener("click", () => {
+    exercise.skipped = !exercise.skipped;
+    persist();
+    renderActiveSession();
+  });
+
+  const editPanel = node.querySelector(".exercise-edit");
+  node.querySelector(".edit-exercise").addEventListener("click", () => {
+    editPanel.classList.toggle("hidden");
+  });
+  renderExerciseEditor(editPanel, exercise, exerciseIndex);
+
+  const fields = document.createElement("div");
+  fields.className = "cardio-fields";
+  fields.innerHTML = `
+    <label>
+      <span>Modality</span>
+      <input data-field="modality" value="${escapeAttr(exercise.modality || "")}" placeholder="Bike, rower, run...">
+    </label>
+    <label>
+      <span>HR zone</span>
+      <input data-field="hrZone" value="${escapeAttr(exercise.hrZone || "")}" placeholder="Z2">
+    </label>
+    <label>
+      <span>Minutes in zone</span>
+      <input data-field="minutesInZone" type="number" min="0" step="1" inputmode="decimal" value="${escapeAttr(exercise.minutesInZone || "")}" placeholder="${escapeAttr(exercise.targetMinutes || "Minutes")}">
+    </label>
+    <label class="cardio-notes">
+      <span>Notes</span>
+      <textarea data-field="notes" placeholder="Optional notes">${escapeHtml(exercise.notes || "")}</textarea>
+    </label>
+  `;
+
+  fields.querySelectorAll("input, textarea").forEach((input) => {
+    input.addEventListener("change", () => {
+      exercise[input.dataset.field] = input.value;
+      state.activeSession.exercises[exerciseIndex] = exercise;
+      persist();
+      renderActiveSession();
+    });
+  });
+  node.querySelector(".sets").append(fields);
+  return node;
+}
+
 function renderExerciseTimer(exercise) {
   if (!timer.totalSeconds || timer.exerciseId !== exercise.id) return null;
 
@@ -729,6 +905,15 @@ function renderExerciseTimer(exercise) {
 }
 
 function getExerciseTargetText(exercise) {
+  if (exercise.type === "cardio") {
+    const pieces = [];
+    if (exercise.targetModality) pieces.push(exercise.targetModality);
+    if (exercise.targetHrZone) pieces.push(exercise.targetHrZone);
+    if (exercise.targetMinutes) pieces.push(`${exercise.targetMinutes} min in zone`);
+    if (exercise.skipped) pieces.push("skipped");
+    return pieces.join(" · ") || "Track modality and time in HR zone";
+  }
+
   if (exercise.trackProgress === false) {
     return exercise.targetReps ? `Warmup · ${exercise.targetReps}` : "Warmup · do not track progress";
   }
@@ -776,13 +961,22 @@ function formatSideSummary(weight, reps, units) {
 }
 
 function renderExerciseEditor(container, exercise, exerciseIndex) {
-  container.innerHTML = `
-    <label>Name <input data-field="name" value="${escapeAttr(exercise.name)}"></label>
-    <label>Sets <input data-field="sets" type="number" min="1" max="12" step="1" value="${exercise.sets.length}"></label>
-    <label>Target reps <input data-field="targetReps" value="${escapeAttr(exercise.targetReps)}"></label>
-    <label>Target ${state.config.units} <input data-field="targetWeight" value="${escapeAttr(exercise.targetWeight)}"></label>
-    <label>Rest seconds <input data-field="restSeconds" type="number" min="0" max="900" step="15" value="${exercise.restSeconds}"></label>
-  `;
+  if (exercise.type === "cardio") {
+    container.innerHTML = `
+      <label>Name <input data-field="name" value="${escapeAttr(exercise.name)}"></label>
+      <label>Target modality <input data-field="targetModality" value="${escapeAttr(exercise.targetModality || "")}"></label>
+      <label>Target HR zone <input data-field="targetHrZone" value="${escapeAttr(exercise.targetHrZone || "")}"></label>
+      <label>Target minutes <input data-field="targetMinutes" value="${escapeAttr(exercise.targetMinutes || "")}"></label>
+    `;
+  } else {
+    container.innerHTML = `
+      <label>Name <input data-field="name" value="${escapeAttr(exercise.name)}"></label>
+      <label>Sets <input data-field="sets" type="number" min="1" max="12" step="1" value="${exercise.sets.length}"></label>
+      <label>Target reps <input data-field="targetReps" value="${escapeAttr(exercise.targetReps)}"></label>
+      <label>Target ${state.config.units} <input data-field="targetWeight" value="${escapeAttr(exercise.targetWeight)}"></label>
+      <label>Rest seconds <input data-field="restSeconds" type="number" min="0" max="900" step="15" value="${exercise.restSeconds}"></label>
+    `;
+  }
 
   container.querySelectorAll("input").forEach((input) => {
     input.addEventListener("change", () => {
@@ -1025,6 +1219,11 @@ function renderHistoryDetails(session) {
         return `<li><strong>${escapeHtml(exercise.name)}</strong>: skipped</li>`;
       }
 
+      if (exercise.type === "cardio") {
+        const summary = formatCardioSummary(exercise);
+        return `<li><strong>${escapeHtml(exercise.name)}</strong><div><span>${escapeHtml(summary || "No cardio time logged")}</span></div></li>`;
+      }
+
       const sets = exercise.sets
         .filter(isSetComplete)
         .map((set, index) => {
@@ -1040,11 +1239,34 @@ function renderHistoryDetails(session) {
 }
 
 function summarizeSession(session) {
+  const cardioExercises = session.exercises.filter((exercise) => exercise.type === "cardio" && !exercise.skipped);
+  const loggedCardio = cardioExercises.filter(isCardioComplete);
+  if (cardioExercises.length) {
+    const totalMinutes = loggedCardio.reduce((total, exercise) => total + Number(exercise.minutesInZone || 0), 0);
+    const skipped = session.exercises.filter((exercise) => exercise.skipped).length;
+    const time = totalMinutes ? `${totalMinutes} min in HR zone` : `${loggedCardio.length} cardio segment${loggedCardio.length === 1 ? "" : "s"}`;
+    return `${time}${skipped ? ` · ${skipped} skipped` : ""}`;
+  }
+
   const sets = session.exercises
     .filter((exercise) => !exercise.skipped)
     .reduce((total, exercise) => total + exercise.sets.filter(isSetComplete).length, 0);
   const skipped = session.exercises.filter((exercise) => exercise.skipped).length;
   return `${sets} logged set${sets === 1 ? "" : "s"}${skipped ? ` · ${skipped} skipped` : ""}`;
+}
+
+function isCardioComplete(exercise) {
+  return [exercise.minutesInZone, exercise.notes]
+    .some((value) => String(value || "").trim() !== "");
+}
+
+function formatCardioSummary(exercise) {
+  const parts = [];
+  if (exercise.modality) parts.push(exercise.modality);
+  if (exercise.hrZone) parts.push(exercise.hrZone);
+  if (exercise.minutesInZone) parts.push(`${exercise.minutesInZone} min in zone`);
+  if (exercise.notes) parts.push(exercise.notes);
+  return parts.join(" · ");
 }
 
 function renderConfigEditor() {
@@ -1121,9 +1343,9 @@ function importBackup(event) {
       const importedState = parsed.state || parsed;
       state.version = 1;
       state.config = normalizeConfig(importedState.config || defaultConfig);
-      state.history = Array.isArray(importedState.history) ? importedState.history : [];
-      state.activeSession = importedState.activeSession || null;
-      state.selectedWorkoutName = importedState.selectedWorkoutName || getNextWorkoutName(state);
+      state.history = Array.isArray(importedState.history) ? importedState.history.map(migrateSessionWorkoutName) : [];
+      state.activeSession = importedState.activeSession ? migrateSessionWorkoutName(importedState.activeSession) : null;
+      state.selectedWorkoutName = renameWorkout(importedState.selectedWorkoutName) || getNextWorkoutName(state);
       state.lastBackupExportedAt = importedState.lastBackupExportedAt || parsed.exportedAt || "";
       state.backupReminderDismissedAt = importedState.backupReminderDismissedAt || "";
       persist();

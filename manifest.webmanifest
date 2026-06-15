@@ -1,7 +1,7 @@
 {
   "name": "Lift Log",
   "short_name": "Lift Log",
-  "description": "Local-first workout routine and set tracker.",
+  "description": "Local-first strength and cardio workout tracker.",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#f4f0e9",
