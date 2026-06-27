@@ -71,13 +71,23 @@
           <div class="panel">
             <div class="panel-header">
               <div>
-                <p class="section-label">Config</p>
+                <p class="section-label">Workout plan</p>
                 <h2>Routines</h2>
               </div>
               <button id="saveConfigBtn" class="primary-button compact" type="button">Save</button>
             </div>
-            <p class="muted tight">Edit the JSON below to change workouts, schedule groups, strength sets and targets, or cardio modality, HR zone, and time targets.</p>
-            <textarea id="configEditor" spellcheck="false" aria-label="Routine configuration"></textarea>
+            <p class="muted tight">Edit workouts and exercises below. Changes stay on this device until you save them.</p>
+            <label class="routine-picker">
+              <span>Workout</span>
+              <select id="routineWorkoutPicker" aria-label="Choose workout to edit"></select>
+            </label>
+            <div id="routineEditor" class="routine-editor"></div>
+            <button id="addWorkoutBtn" class="secondary-button routine-add" type="button">Add workout</button>
+            <details id="advancedConfig" class="advanced-config">
+              <summary>Advanced JSON</summary>
+              <p class="muted tight">For schedule ordering, alternating variants, and other advanced changes.</p>
+              <textarea id="configEditor" spellcheck="false" aria-label="Advanced routine configuration"></textarea>
+            </details>
             <p id="configStatus" class="status-line" role="status"></p>
           </div>
         </section>

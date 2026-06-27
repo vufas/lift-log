@@ -1,4 +1,4 @@
-const CACHE_NAME = "lift-log-v10";
+const CACHE_NAME = "lift-log-v13";
 const APP_SHELL = [
   "./",
   "./index.html",

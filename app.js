@@ -27,7 +27,7 @@ const defaultConfig = {
         { name: "Hip abduction (open)", sets: 2, targetReps: "12-15", targetWeight: "", restSeconds: 75 },
         { name: "Standing calf", sets: 3, targetReps: "12-20", targetWeight: "", restSeconds: 75 },
         { name: "Hanging leg raise", sets: 2, targetReps: "AMRAP (goal: 20 clean)", targetWeight: "", restSeconds: 60 },
-        { name: "Pallof press", sets: 2, targetReps: "", targetWeight: "", restSeconds: 60 }
+        { name: "Pallof press", sets: 2, targetReps: "", targetWeight: "", restSeconds: 60, isUnilateral: true }
       ]
     },
     {
@@ -46,7 +46,7 @@ const defaultConfig = {
           ]
         },
         { name: "Reverse preacher curl", sets: 2, targetReps: "12-15", targetWeight: "", restSeconds: 75 },
-        { name: "Cable external rotation", sets: 1, targetReps: "15-20", targetWeight: "", restSeconds: 60 }
+        { name: "Cable external rotation", sets: 1, targetReps: "15-20", targetWeight: "", restSeconds: 60, isUnilateral: true }
       ]
     },
     {
@@ -113,6 +113,9 @@ const defaultConfig = {
 };
 
 const state = loadState();
+let routineDraft = null;
+let selectedRoutineWorkoutName = "";
+let configJsonDirty = false;
 let timer = {
   intervalId: null,
   startedAt: 0,
@@ -143,6 +146,10 @@ function bindDom() {
     resumeWorkoutBtn: document.querySelector("#resumeWorkoutBtn"),
     activeSession: document.querySelector("#activeSession"),
     historyList: document.querySelector("#historyList"),
+    routineWorkoutPicker: document.querySelector("#routineWorkoutPicker"),
+    routineEditor: document.querySelector("#routineEditor"),
+    addWorkoutBtn: document.querySelector("#addWorkoutBtn"),
+    advancedConfig: document.querySelector("#advancedConfig"),
     configEditor: document.querySelector("#configEditor"),
     saveConfigBtn: document.querySelector("#saveConfigBtn"),
     configStatus: document.querySelector("#configStatus"),
@@ -179,14 +186,29 @@ function bindEvents() {
   });
 
   dom.saveConfigBtn.addEventListener("click", saveConfigFromEditor);
+  dom.routineWorkoutPicker.addEventListener("change", () => {
+    selectedRoutineWorkoutName = dom.routineWorkoutPicker.value;
+    renderRoutineEditor();
+  });
+  dom.addWorkoutBtn.addEventListener("click", addRoutineWorkout);
+  dom.configEditor.addEventListener("input", () => {
+    configJsonDirty = true;
+    setRoutineFormDisabled(true);
+    dom.configStatus.textContent = "Advanced JSON has unsaved changes. Save or reload the page before using the form.";
+  });
+  dom.advancedConfig.addEventListener("toggle", () => {
+    if (dom.advancedConfig.open && !configJsonDirty) renderConfigEditor();
+  });
   dom.exportBtn.addEventListener("click", exportBackup);
   dom.settingsExportBtn.addEventListener("click", exportBackup);
   dom.importInput.addEventListener("change", importBackup);
   dom.clearHistoryBtn.addEventListener("click", clearHistory);
   dom.unitSelect.addEventListener("change", () => {
     state.config.units = dom.unitSelect.value;
+    if (routineDraft) routineDraft.units = dom.unitSelect.value;
     persist();
     renderActiveSession();
+    renderConfigEditor();
   });
 
   dom.deloadEnabled.addEventListener("change", () => updateDeloadSettings());
@@ -436,12 +458,15 @@ function migrateExerciseUnilateralField(exercise) {
 
 function migrateSingleExerciseUnilateralField(exercise) {
   if (!exercise || typeof exercise !== "object") return exercise;
-  if (!Object.hasOwn(exercise, "unilateral") || Object.hasOwn(exercise, "isUnilateral")) return exercise;
+  const shouldTrackSides = ["Cable external rotation", "Pallof press"].includes(exercise.name);
+  if (!Object.hasOwn(exercise, "unilateral")) {
+    return shouldTrackSides ? { ...exercise, isUnilateral: true } : exercise;
+  }
 
   const { unilateral, ...rest } = exercise;
   return {
     ...rest,
-    isUnilateral: Boolean(unilateral)
+    isUnilateral: shouldTrackSides || Boolean(rest.isUnilateral ?? unilateral)
   };
 }
 
@@ -453,6 +478,7 @@ function renderAll() {
   renderToday();
   renderActiveSession();
   renderHistory();
+  renderRoutineEditor();
   renderConfigEditor();
   renderSettings();
 }
@@ -1269,17 +1295,337 @@ function formatCardioSummary(exercise) {
   return parts.join(" · ");
 }
 
+function getRoutineDraft() {
+  if (!routineDraft) routineDraft = structuredClone(state.config);
+  return routineDraft;
+}
+
+function renderRoutineEditor() {
+  const draft = getRoutineDraft();
+  const selectedWorkout = getSelectedRoutineWorkout();
+  dom.routineEditor.innerHTML = "";
+  dom.routineWorkoutPicker.innerHTML = "";
+  draft.workouts.forEach((workout) => {
+    const option = document.createElement("option");
+    option.value = workout.name;
+    option.textContent = workout.name;
+    dom.routineWorkoutPicker.append(option);
+  });
+  dom.routineWorkoutPicker.value = selectedWorkout.name;
+
+  const workoutIndex = draft.workouts.indexOf(selectedWorkout);
+  const workout = selectedWorkout;
+  const card = document.createElement("article");
+  card.className = "routine-workout";
+  card.innerHTML = `
+    <div class="routine-workout-head">
+      <label class="routine-name">
+        <span>Workout name</span>
+        <input value="${escapeAttr(workout.name)}" aria-label="Workout name">
+      </label>
+      <label>
+        <span>Group</span>
+        <select aria-label="${escapeAttr(workout.name)} schedule group">
+          <option value="">Other</option>
+          <option value="lift">Strength</option>
+          <option value="cardio">Cardio</option>
+        </select>
+      </label>
+    </div>
+    <label class="routine-notes">
+      <span>Workout notes</span>
+      <input value="${escapeAttr(workout.notes || "")}" placeholder="Optional">
+    </label>
+    <div class="routine-exercises"></div>
+    <div class="routine-actions">
+      <button class="secondary-button" type="button" data-action="add-exercise">Add exercise</button>
+      <button class="danger-button" type="button" data-action="remove-workout" ${draft.workouts.length === 1 ? "disabled" : ""}>Remove workout</button>
+    </div>
+  `;
+
+  const nameInput = card.querySelector(".routine-name input");
+  nameInput.addEventListener("change", () => renameRoutineWorkout(workoutIndex, nameInput.value));
+
+  const groupSelect = card.querySelector(".routine-workout-head select");
+  groupSelect.value = getDraftWorkoutGroup(workout.name);
+  groupSelect.addEventListener("change", () => {
+    setDraftWorkoutGroup(workout.name, groupSelect.value);
+    markRoutineDraftChanged();
+  });
+
+  const notesInput = card.querySelector(".routine-notes input");
+  notesInput.addEventListener("change", () => {
+    workout.notes = notesInput.value;
+    markRoutineDraftChanged();
+  });
+
+  const exerciseList = card.querySelector(".routine-exercises");
+  workout.exercises.forEach((exercise, exerciseIndex) => {
+    exerciseList.append(renderRoutineExercise(workout, workoutIndex, exercise, exerciseIndex));
+  });
+
+  card.querySelector('[data-action="add-exercise"]').addEventListener("click", () => {
+    const group = getDraftWorkoutGroup(workout.name);
+    workout.exercises.push(group === "cardio"
+      ? { name: "New cardio segment", type: "cardio", targetModality: "", targetHrZone: "", targetMinutes: "" }
+      : { name: "New exercise", sets: 3, targetReps: "", targetWeight: "", restSeconds: 90 });
+    markRoutineDraftChanged(true);
+  });
+
+  card.querySelector('[data-action="remove-workout"]').addEventListener("click", () => {
+    if (!window.confirm(`Remove ${workout.name}?`)) return;
+    removeRoutineWorkout(workoutIndex);
+  });
+  dom.routineEditor.append(card);
+  setRoutineFormDisabled(configJsonDirty);
+}
+
+function getSelectedRoutineWorkout() {
+  const draft = getRoutineDraft();
+  const preferredName = selectedRoutineWorkoutName || state.selectedWorkoutName;
+  const workout = draft.workouts.find((item) => item.name === preferredName) || draft.workouts[0];
+  selectedRoutineWorkoutName = workout.name;
+  return workout;
+}
+
+function renderRoutineExercise(workout, workoutIndex, exercise, exerciseIndex) {
+  const card = document.createElement("div");
+  card.className = "routine-exercise";
+
+  if (Array.isArray(exercise.variants)) {
+    card.innerHTML = `
+      <div class="routine-exercise-head">
+        <label>
+          <span>Alternating exercise</span>
+          <input value="${escapeAttr(exercise.name)}">
+        </label>
+        <span class="routine-badge">Alternates each workout</span>
+      </div>
+      <div class="routine-variants"></div>
+      <div class="routine-item-actions">
+        ${renderMoveButtons(exerciseIndex, workout.exercises.length)}
+        <button class="danger-button compact-action" type="button" data-action="remove">Remove</button>
+      </div>
+    `;
+    const nameInput = card.querySelector(".routine-exercise-head input");
+    nameInput.addEventListener("change", () => {
+      exercise.name = nameInput.value;
+      markRoutineDraftChanged();
+    });
+    const variants = card.querySelector(".routine-variants");
+    exercise.variants.forEach((variant, variantIndex) => {
+      const panel = document.createElement("div");
+      panel.className = "routine-variant";
+      panel.innerHTML = `<p class="section-label">Option ${variantIndex + 1}</p>`;
+      panel.append(renderRoutineExerciseFields(variant));
+      variants.append(panel);
+    });
+  } else {
+    card.append(renderRoutineExerciseFields(exercise));
+    const actions = document.createElement("div");
+    actions.className = "routine-item-actions";
+    actions.innerHTML = `
+      ${renderMoveButtons(exerciseIndex, workout.exercises.length)}
+      <button class="danger-button compact-action" type="button" data-action="remove">Remove</button>
+    `;
+    card.append(actions);
+  }
+
+  bindRoutineItemActions(card, workoutIndex, exerciseIndex);
+  return card;
+}
+
+function renderRoutineExerciseFields(exercise) {
+  const fields = document.createElement("div");
+  fields.className = "routine-exercise-fields";
+  const type = getRoutineExerciseType(exercise);
+  fields.innerHTML = `
+    <label class="routine-exercise-name">
+      <span>Exercise</span>
+      <input data-field="name" value="${escapeAttr(exercise.name || "")}">
+    </label>
+    <label>
+      <span>Tracking</span>
+      <select data-field="type">
+        <option value="strength">Sets and reps</option>
+        <option value="cardio">Cardio time</option>
+        <option value="warmup">Do not track</option>
+      </select>
+    </label>
+    ${type === "cardio" ? `
+      <label><span>Target modality</span><input data-field="targetModality" value="${escapeAttr(exercise.targetModality || "")}" placeholder="Bike, run, row..."></label>
+      <label><span>Target HR zone</span><input data-field="targetHrZone" value="${escapeAttr(exercise.targetHrZone || "")}" placeholder="Z2"></label>
+      <label><span>Target minutes</span><input data-field="targetMinutes" value="${escapeAttr(exercise.targetMinutes || "")}" inputmode="decimal"></label>
+    ` : `
+      <label><span>${type === "warmup" ? "Instructions" : "Target reps"}</span><input data-field="targetReps" value="${escapeAttr(exercise.targetReps || "")}"></label>
+      ${type === "strength" ? `
+        <label><span>Sets</span><input data-field="sets" type="number" min="1" max="12" value="${Number(exercise.sets || 1)}"></label>
+        <label><span>Target weight</span><input data-field="targetWeight" value="${escapeAttr(exercise.targetWeight || "")}" inputmode="decimal"></label>
+        <label><span>Rest seconds</span><input data-field="restSeconds" type="number" min="0" max="900" step="15" value="${Number(exercise.restSeconds || 0)}"></label>
+        <label class="routine-checkbox"><input data-field="isUnilateral" type="checkbox" ${isExerciseUnilateral(exercise) ? "checked" : ""}><span>Track left and right separately</span></label>
+      ` : ""}
+    `}
+  `;
+
+  fields.querySelector('[data-field="type"]').value = type;
+  fields.querySelectorAll("input, select").forEach((input) => {
+    input.addEventListener("change", () => {
+      const field = input.dataset.field;
+      if (field === "type") {
+        replaceRoutineExerciseType(exercise, input.value);
+        markRoutineDraftChanged(true);
+        return;
+      }
+      if (input.type === "checkbox") {
+        exercise[field] = input.checked;
+      } else if (["sets", "restSeconds"].includes(field)) {
+        exercise[field] = Number(input.value || 0);
+      } else {
+        exercise[field] = input.value;
+      }
+      markRoutineDraftChanged();
+    });
+  });
+  return fields;
+}
+
+function getRoutineExerciseType(exercise) {
+  if (exercise.type === "cardio") return "cardio";
+  if (exercise.trackProgress === false) return "warmup";
+  return "strength";
+}
+
+function replaceRoutineExerciseType(exercise, type) {
+  const name = exercise.name || "New exercise";
+  Object.keys(exercise).forEach((key) => delete exercise[key]);
+  if (type === "cardio") {
+    Object.assign(exercise, { name, type: "cardio", targetModality: "", targetHrZone: "", targetMinutes: "" });
+  } else if (type === "warmup") {
+    Object.assign(exercise, { name, sets: 0, targetReps: "", targetWeight: "", restSeconds: 0, trackProgress: false });
+  } else {
+    Object.assign(exercise, { name, sets: 3, targetReps: "", targetWeight: "", restSeconds: 90 });
+  }
+}
+
+function renderMoveButtons(index, length) {
+  return `
+    <button class="secondary-button compact-action" type="button" data-action="up" ${index === 0 ? "disabled" : ""} aria-label="Move exercise up">Up</button>
+    <button class="secondary-button compact-action" type="button" data-action="down" ${index === length - 1 ? "disabled" : ""} aria-label="Move exercise down">Down</button>
+  `;
+}
+
+function bindRoutineItemActions(card, workoutIndex, exerciseIndex) {
+  card.querySelector('[data-action="up"]')?.addEventListener("click", () => moveRoutineExercise(workoutIndex, exerciseIndex, -1));
+  card.querySelector('[data-action="down"]')?.addEventListener("click", () => moveRoutineExercise(workoutIndex, exerciseIndex, 1));
+  card.querySelector('[data-action="remove"]')?.addEventListener("click", () => {
+    getRoutineDraft().workouts[workoutIndex].exercises.splice(exerciseIndex, 1);
+    markRoutineDraftChanged(true);
+  });
+}
+
+function moveRoutineExercise(workoutIndex, exerciseIndex, offset) {
+  const exercises = getRoutineDraft().workouts[workoutIndex].exercises;
+  const destination = exerciseIndex + offset;
+  if (destination < 0 || destination >= exercises.length) return;
+  [exercises[exerciseIndex], exercises[destination]] = [exercises[destination], exercises[exerciseIndex]];
+  markRoutineDraftChanged(true);
+}
+
+function addRoutineWorkout() {
+  const draft = getRoutineDraft();
+  let number = draft.workouts.length + 1;
+  let name = `Workout ${number}`;
+  while (draft.workouts.some((workout) => workout.name === name)) {
+    number += 1;
+    name = `Workout ${number}`;
+  }
+  draft.workouts.push({ name, exercises: [] });
+  draft.cycleOrder.push(name);
+  selectedRoutineWorkoutName = name;
+  markRoutineDraftChanged(true);
+}
+
+function removeRoutineWorkout(workoutIndex) {
+  const draft = getRoutineDraft();
+  if (draft.workouts.length <= 1) {
+    dom.configStatus.textContent = "At least one workout is required.";
+    return;
+  }
+  const [removed] = draft.workouts.splice(workoutIndex, 1);
+  draft.cycleOrder = draft.cycleOrder.filter((name) => name !== removed.name);
+  Object.values(draft.schedule.groups).forEach((names) => {
+    const index = names.indexOf(removed.name);
+    if (index !== -1) names.splice(index, 1);
+  });
+  selectedRoutineWorkoutName = draft.workouts[Math.min(workoutIndex, draft.workouts.length - 1)].name;
+  markRoutineDraftChanged(true);
+}
+
+function renameRoutineWorkout(workoutIndex, requestedName) {
+  const draft = getRoutineDraft();
+  const workout = draft.workouts[workoutIndex];
+  const oldName = workout.name;
+  const name = requestedName.trim();
+  if (!name || draft.workouts.some((item, index) => index !== workoutIndex && item.name === name)) {
+    dom.configStatus.textContent = "Workout names must be unique and cannot be blank.";
+    renderRoutineEditor();
+    return;
+  }
+  workout.name = name;
+  if (selectedRoutineWorkoutName === oldName) selectedRoutineWorkoutName = name;
+  draft.cycleOrder = draft.cycleOrder.map((item) => item === oldName ? name : item);
+  Object.values(draft.schedule.groups).forEach((names) => {
+    const index = names.indexOf(oldName);
+    if (index !== -1) names[index] = name;
+  });
+  markRoutineDraftChanged(true);
+}
+
+function getDraftWorkoutGroup(workoutName) {
+  const groups = getRoutineDraft().schedule?.groups || {};
+  return Object.entries(groups).find(([, names]) => names.includes(workoutName))?.[0] || "";
+}
+
+function setDraftWorkoutGroup(workoutName, targetGroup) {
+  const groups = getRoutineDraft().schedule.groups;
+  Object.values(groups).forEach((names) => {
+    const index = names.indexOf(workoutName);
+    if (index !== -1) names.splice(index, 1);
+  });
+  if (targetGroup && Array.isArray(groups[targetGroup])) groups[targetGroup].push(workoutName);
+}
+
+function markRoutineDraftChanged(rerender = false) {
+  dom.configStatus.textContent = "Unsaved changes.";
+  if (!configJsonDirty) renderConfigEditor();
+  if (rerender) renderRoutineEditor();
+}
+
+function setRoutineFormDisabled(disabled) {
+  dom.routineEditor.inert = disabled;
+  dom.routineEditor.classList.toggle("routine-editor-disabled", disabled);
+  dom.routineWorkoutPicker.disabled = disabled;
+  dom.addWorkoutBtn.disabled = disabled;
+}
+
 function renderConfigEditor() {
-  dom.configEditor.value = JSON.stringify(state.config, null, 2);
+  if (configJsonDirty) return;
+  dom.configEditor.value = JSON.stringify(getRoutineDraft(), null, 2);
 }
 
 function saveConfigFromEditor() {
   try {
-    const parsed = JSON.parse(dom.configEditor.value);
-    state.config = normalizeConfig(parsed);
+    const candidate = configJsonDirty ? JSON.parse(dom.configEditor.value) : getRoutineDraft();
+    state.config = normalizeConfig(candidate);
     state.selectedWorkoutName = state.config.cycleOrder.includes(state.selectedWorkoutName)
       ? state.selectedWorkoutName
       : state.config.cycleOrder[0];
+    routineDraft = structuredClone(state.config);
+    selectedRoutineWorkoutName = state.config.workouts.some((workout) => workout.name === selectedRoutineWorkoutName)
+      ? selectedRoutineWorkoutName
+      : state.config.workouts[0].name;
+    configJsonDirty = false;
+    setRoutineFormDisabled(false);
     persist();
     renderAll();
     dom.configStatus.textContent = "Saved.";
@@ -1304,6 +1650,7 @@ function updateDeloadSettings() {
     everyCycles: Number(dom.deloadEvery.value || 4),
     targetReductionPercent: Number(dom.deloadReduction.value || 15)
   };
+  if (routineDraft) routineDraft.deload = structuredClone(state.config.deload);
   persist();
   renderToday();
   renderConfigEditor();
@@ -1348,6 +1695,9 @@ function importBackup(event) {
       state.selectedWorkoutName = renameWorkout(importedState.selectedWorkoutName) || getNextWorkoutName(state);
       state.lastBackupExportedAt = importedState.lastBackupExportedAt || parsed.exportedAt || "";
       state.backupReminderDismissedAt = importedState.backupReminderDismissedAt || "";
+      routineDraft = null;
+      selectedRoutineWorkoutName = "";
+      configJsonDirty = false;
       persist();
       renderAll();
       window.alert("Backup imported.");

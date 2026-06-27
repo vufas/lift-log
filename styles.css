@@ -517,9 +517,183 @@ main {
   padding: 4px 8px;
 }
 
+.routine-editor {
+  display: grid;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.routine-editor-disabled {
+  opacity: 0.5;
+}
+
+.routine-picker {
+  display: grid;
+  gap: 5px;
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+.routine-picker select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  color: var(--ink);
+  padding: 9px 11px;
+  font-size: 1rem;
+  font-weight: 750;
+}
+
+.routine-picker select:disabled {
+  opacity: 0.5;
+}
+
+.routine-workout {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  padding: 14px;
+}
+
+.routine-workout-head,
+.routine-exercise-head {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(130px, 1fr);
+  gap: 10px;
+  align-items: end;
+}
+
+.routine-workout label,
+.routine-exercise label,
+.routine-variant label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+.routine-workout input,
+.routine-workout select,
+.routine-exercise input,
+.routine-exercise select {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 9px 10px;
+}
+
+.routine-notes {
+  margin-top: 10px;
+}
+
+.routine-exercises,
+.routine-variants {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.routine-exercise {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  padding: 12px;
+}
+
+.routine-exercise-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.routine-exercise-name {
+  grid-column: span 2;
+}
+
+.routine-checkbox {
+  display: flex !important;
+  grid-column: 1 / -1;
+  align-items: center;
+  gap: 8px !important;
+  min-height: 44px;
+}
+
+.routine-checkbox input {
+  width: 24px;
+  min-height: 24px;
+}
+
+.routine-variant {
+  border-left: 3px solid var(--accent-soft);
+  padding-left: 10px;
+}
+
+.routine-badge {
+  align-self: center;
+  justify-self: end;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  padding: 5px 9px;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.routine-actions,
+.routine-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.routine-actions {
+  justify-content: space-between;
+}
+
+.compact-action {
+  min-height: 36px;
+  padding: 0 11px;
+  font-size: 0.82rem;
+}
+
+.compact-action:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
+.routine-add {
+  width: 100%;
+  margin-top: 14px;
+}
+
+.routine-add:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.advanced-config {
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.advanced-config summary {
+  color: var(--accent-strong);
+  cursor: pointer;
+  font-weight: 800;
+}
+
 #configEditor {
   width: 100%;
   min-height: 58vh;
+  margin-top: 10px;
   resize: vertical;
   border: 1px solid var(--line);
   border-radius: 8px;
@@ -677,5 +851,19 @@ main {
 
   .cardio-fields .cardio-notes {
     grid-column: auto;
+  }
+
+  .routine-workout-head,
+  .routine-exercise-head,
+  .routine-exercise-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .routine-exercise-name {
+    grid-column: auto;
+  }
+
+  .routine-badge {
+    justify-self: start;
   }
 }
