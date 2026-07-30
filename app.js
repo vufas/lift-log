@@ -97,7 +97,7 @@ const defaultConfig = {
       exercises: [
         { name: "Warmup", type: "cardio", targetModality: "Erg", targetHrZone: "50-60% HR max", targetMinutes: "5" },
         { name: "Norwegian 4x4", type: "cardio", targetModality: "Erg", targetHrZone: "Z3-Z5", targetMinutes: "16", trackHrZones: ["Z3", "Z4", "Z5"] },
-        { name: "Zone 2", type: "cardio", targetModality: "Erg", targetHrZone: "Z2", targetMinutes: "15" }
+        { name: "Zone 2", type: "cardio", targetModality: "Erg", targetHrZone: "Z2", targetMinutes: "15", fixedHrZone: "Z2" }
       ]
     },
     {
@@ -110,7 +110,7 @@ const defaultConfig = {
       name: "15/15s & Z2",
       exercises: [
         { name: "15/15s", type: "cardio", targetModality: "Elliptical", targetHrZone: "Z3-Z5", targetMinutes: "25-30", trackHrZones: ["Z3", "Z4", "Z5"] },
-        { name: "Zone 2", type: "cardio", targetModality: "Elliptical", targetHrZone: "Z2", targetMinutes: "30" }
+        { name: "Zone 2", type: "cardio", targetModality: "Elliptical", targetHrZone: "Z2", targetMinutes: "30", fixedHrZone: "Z2" }
       ]
     }
   ]
@@ -374,6 +374,10 @@ function inferCardioModality(workoutName, text) {
 }
 
 function applyCardioWorkoutDefaults(workoutName, exercise) {
+  const hasFixedZone2 = (
+    ["4x4 & Z2", "15/15s & Z2"].includes(workoutName) &&
+    /^zone\s*2$/i.test(exercise.name || "")
+  );
   const specialZones = (
     (workoutName === "4x4 & Z2" && /norwegian|4x4/i.test(exercise.name || "")) ||
     (workoutName === "15/15s & Z2" && /15\s*\/\s*15/i.test(exercise.name || ""))
@@ -384,6 +388,14 @@ function applyCardioWorkoutDefaults(workoutName, exercise) {
       ? "Elliptical"
       : exercise.targetModality || "";
 
+  if (hasFixedZone2) {
+    return {
+      ...exercise,
+      targetModality,
+      targetHrZone: "Z2",
+      fixedHrZone: "Z2"
+    };
+  }
   if (!specialZones) return { ...exercise, targetModality };
   return {
     ...exercise,
@@ -744,6 +756,7 @@ function createSessionExercise(workoutName, exercise) {
       targetModality: resolvedExercise.targetModality || "",
       targetHrZone: resolvedExercise.targetHrZone || "",
       targetMinutes: resolvedExercise.targetMinutes || "",
+      fixedHrZone: resolvedExercise.fixedHrZone || "",
       modality: resolvedExercise.targetModality || "",
       hrZone: resolvedExercise.targetHrZone || "",
       minutesInZone: "",
@@ -996,7 +1009,14 @@ function renderCardioExercise(exercise, exerciseIndex) {
         <input data-zone="${escapeAttr(zone)}" type="number" min="0" step="0.1" inputmode="decimal" value="${escapeAttr(exercise.minutesByHrZone?.[zone] || "")}" placeholder="0">
       </label>
     `).join("")
-    : `
+    : exercise.fixedHrZone
+      ? `
+      <label>
+        <span>Minutes in ${escapeHtml(exercise.fixedHrZone)}</span>
+        <input data-field="minutesInZone" type="number" min="0" step="0.1" inputmode="decimal" value="${escapeAttr(exercise.minutesInZone || "")}" placeholder="${escapeAttr(exercise.targetMinutes || "Minutes")}">
+      </label>
+    `
+      : `
       <label>
         <span>HR zone</span>
         <input data-field="hrZone" value="${escapeAttr(exercise.hrZone || "")}" placeholder="Z2">
@@ -1479,8 +1499,12 @@ function formatCardioSummary(exercise) {
       parts.push(`${exercise.minutesInZone} min in zone`);
     }
   } else {
-    if (exercise.hrZone) parts.push(exercise.hrZone);
-    if (exercise.minutesInZone) parts.push(`${exercise.minutesInZone} min in zone`);
+    if (exercise.fixedHrZone) {
+      if (exercise.minutesInZone) parts.push(`${exercise.minutesInZone} min ${exercise.fixedHrZone}`);
+    } else {
+      if (exercise.hrZone) parts.push(exercise.hrZone);
+      if (exercise.minutesInZone) parts.push(`${exercise.minutesInZone} min in zone`);
+    }
   }
   if (exercise.notes) parts.push(exercise.notes);
   return parts.join(" · ");
