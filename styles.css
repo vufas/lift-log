@@ -399,31 +399,24 @@ main {
 
 .set-row {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) minmax(0, 1fr) minmax(140px, 1.25fr) 108px;
+  grid-template-columns: 36px minmax(0, 1fr) minmax(0, 1fr) minmax(140px, 1.25fr);
   gap: 8px;
   align-items: center;
 }
 
-.set-row.unilateral {
-  grid-template-columns: 30px minmax(0, 1fr) minmax(0, 1fr) 108px;
-}
-
-.set-row.unilateral textarea {
-  grid-column: 2 / span 2;
-}
-
-.set-row.unilateral select {
-  grid-column: 4;
-}
-
-.side-fields {
+.unilateral-set-pair {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
   gap: 6px;
-  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px;
 }
 
-.side-fields span {
+.set-row.unilateral-side {
+  grid-template-columns: 36px 42px minmax(0, 1fr) minmax(0, 1fr) minmax(140px, 1.25fr);
+}
+
+.side-label {
   color: var(--muted);
   font-size: 0.78rem;
   font-weight: 800;
@@ -454,6 +447,25 @@ main {
 .set-row textarea {
   min-height: 44px;
   resize: vertical;
+}
+
+.notes-only-field {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 750;
+}
+
+.notes-only-field textarea {
+  width: 100%;
+  min-height: 96px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  padding: 10px;
+  resize: vertical;
+  color: var(--ink);
 }
 
 .set-row.complete .set-number {
@@ -826,19 +838,16 @@ main {
     grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1fr);
   }
 
-  .set-row textarea,
-  .set-row select {
+  .set-row textarea {
     grid-column: 2 / span 2;
   }
 
-  .set-row.unilateral {
-    grid-template-columns: 28px minmax(0, 1fr);
+  .set-row.unilateral-side {
+    grid-template-columns: 34px 42px minmax(0, 1fr) minmax(0, 1fr);
   }
 
-  .set-row.unilateral .side-fields,
-  .set-row.unilateral textarea,
-  .set-row.unilateral select {
-    grid-column: 2;
+  .set-row.unilateral-side textarea {
+    grid-column: 3 / span 2;
   }
 
   .current-workout select {

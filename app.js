@@ -2,13 +2,13 @@ const STORAGE_KEY = "liftLogState.v1";
 
 const defaultConfig = {
   units: "lb",
-  cycleOrder: ["Upper A", "Z2", "Lower A", "HIIT - Erg", "Upper B", "Light HIIT and Z2", "Lower B"],
+  cycleOrder: ["Upper A", "Z2", "Lower A", "4x4 & Z2", "Upper B", "15/15s & Z2", "Lower B"],
   schedule: {
     mode: "alternatingGroups",
     groupOrder: ["lift", "cardio"],
     groups: {
       lift: ["Upper A", "Lower A", "Upper B", "Lower B"],
-      cardio: ["Z2", "HIIT - Erg", "Light HIIT and Z2"]
+      cardio: ["Z2", "4x4 & Z2", "15/15s & Z2"]
     }
   },
   deload: {
@@ -27,7 +27,8 @@ const defaultConfig = {
         { name: "Hip abduction (open)", sets: 2, targetReps: "12-15", targetWeight: "", restSeconds: 75 },
         { name: "Standing calf", sets: 3, targetReps: "12-20", targetWeight: "", restSeconds: 75 },
         { name: "Hanging leg raise", sets: 2, targetReps: "AMRAP (goal: 20 clean)", targetWeight: "", restSeconds: 60 },
-        { name: "Pallof press", sets: 2, targetReps: "", targetWeight: "", restSeconds: 60, isUnilateral: true }
+        { name: "Pallof press", sets: 2, targetReps: "", targetWeight: "", restSeconds: 60, isUnilateral: true },
+        { name: "Extras", type: "notes" }
       ]
     },
     {
@@ -46,7 +47,8 @@ const defaultConfig = {
           ]
         },
         { name: "Reverse preacher curl", sets: 2, targetReps: "12-15", targetWeight: "", restSeconds: 75 },
-        { name: "Cable external rotation", sets: 1, targetReps: "15-20", targetWeight: "", restSeconds: 60, isUnilateral: true }
+        { name: "Cable external rotation", sets: 1, targetReps: "15-20", targetWeight: "", restSeconds: 60, isUnilateral: true },
+        { name: "Extras", type: "notes" }
       ]
     },
     {
@@ -66,7 +68,8 @@ const defaultConfig = {
         },
         { name: "Dragon Flag", sets: 2, targetReps: "AMRAP", targetWeight: "", restSeconds: 60 },
         { name: "Seated Leg Curl", sets: 2, targetReps: "12-15", targetWeight: "", restSeconds: 75 },
-        { name: "Hip adduction (close)", sets: 2, targetReps: "12-15", targetWeight: "", restSeconds: 75 }
+        { name: "Hip adduction (close)", sets: 2, targetReps: "12-15", targetWeight: "", restSeconds: 75 },
+        { name: "Extras", type: "notes" }
       ]
     },
     {
@@ -85,14 +88,15 @@ const defaultConfig = {
             { name: "Weighted farmer's carry", sets: 2, targetReps: "50m+", targetWeight: "", restSeconds: 90 },
             { name: "Suitcase carry", sets: 2, targetReps: "50m+", targetWeight: "", restSeconds: 90, isUnilateral: true }
           ]
-        }
+        },
+        { name: "Extras", type: "notes" }
       ]
     },
     {
-      name: "HIIT - Erg",
+      name: "4x4 & Z2",
       exercises: [
         { name: "Warmup", type: "cardio", targetModality: "Erg", targetHrZone: "50-60% HR max", targetMinutes: "5" },
-        { name: "Norwegian 4x4", type: "cardio", targetModality: "Erg", targetHrZone: "Z4", targetMinutes: "16" },
+        { name: "Norwegian 4x4", type: "cardio", targetModality: "Erg", targetHrZone: "Z3-Z5", targetMinutes: "16", trackHrZones: ["Z3", "Z4", "Z5"] },
         { name: "Zone 2", type: "cardio", targetModality: "Erg", targetHrZone: "Z2", targetMinutes: "15" }
       ]
     },
@@ -103,10 +107,10 @@ const defaultConfig = {
       ]
     },
     {
-      name: "Light HIIT and Z2",
+      name: "15/15s & Z2",
       exercises: [
-        { name: "Light HIIT", type: "cardio", targetModality: "", targetHrZone: "Z3-low Z4", targetMinutes: "25-30" },
-        { name: "Zone 2", type: "cardio", targetModality: "", targetHrZone: "Z2", targetMinutes: "30" }
+        { name: "15/15s", type: "cardio", targetModality: "Elliptical", targetHrZone: "Z3-Z5", targetMinutes: "25-30", trackHrZones: ["Z3", "Z4", "Z5"] },
+        { name: "Zone 2", type: "cardio", targetModality: "Elliptical", targetHrZone: "Z2", targetMinutes: "30" }
       ]
     }
   ]
@@ -283,7 +287,7 @@ function normalizeConfig(config) {
     ? config.cycleOrder
     : merged.workouts.map((workout) => workout.name);
   merged.units = config.units || "lb";
-  return merged;
+  return ensureLiftExtras(merged);
 }
 
 function migrateCardioWorkouts(config) {
@@ -303,7 +307,7 @@ function migrateCardioWorkouts(config) {
     );
   }
 
-  const cardioNames = new Set(migrated.schedule?.groups?.cardio || ["Z2", "HIIT - Erg", "Light HIIT and Z2"]);
+  const cardioNames = new Set(migrated.schedule?.groups?.cardio || ["Z2", "4x4 & Z2", "15/15s & Z2"]);
   migrated.workouts = migrated.workouts.map((workout) => {
     const name = renameWorkout(workout.name);
     if (!cardioNames.has(name)) return { ...workout, name };
@@ -321,15 +325,17 @@ function migrateCardioWorkouts(config) {
 }
 
 function renameWorkout(name) {
-  return name === "Jog" ? "Light HIIT and Z2" : name;
+  if (["HIIT - Erg", "Hard HIIT and Z2"].includes(name)) return "4x4 & Z2";
+  if (["Jog", "Light HIIT and Z2"].includes(name)) return "15/15s & Z2";
+  return name;
 }
 
 function migrateCardioExercise(workoutName, exercise) {
   if (exercise?.type === "cardio") {
-    return {
+    return applyCardioWorkoutDefaults(workoutName, {
       ...exercise,
       name: migrateCardioExerciseName(workoutName, exercise.name)
-    };
+    });
   }
 
   const {
@@ -343,27 +349,67 @@ function migrateCardioExercise(workoutName, exercise) {
   } = exercise || {};
   const text = `${exercise?.name || ""} ${targetReps || ""}`;
 
-  return {
+  return applyCardioWorkoutDefaults(workoutName, {
     ...rest,
     name: migrateCardioExerciseName(workoutName, exercise?.name),
     type: "cardio",
     targetModality: inferCardioModality(workoutName, text),
     targetHrZone: inferHrZone(text),
     targetMinutes: inferTargetMinutes(text, targetReps)
-  };
+  });
 }
 
 function migrateCardioExerciseName(workoutName, name) {
-  if (workoutName !== "Light HIIT and Z2") return name || "Cardio";
-  if (/5k jog|tempo intervals/i.test(name || "")) return "Light HIIT";
+  if (workoutName !== "15/15s & Z2") return name || "Cardio";
+  if (/light hiit|15\s*\/\s*15|5k jog|tempo intervals/i.test(name || "")) return "15/15s";
   if (/easy z2 jog/i.test(name || "")) return "Zone 2";
   return name || "Cardio";
 }
 
 function inferCardioModality(workoutName, text) {
-  if (/erg/i.test(workoutName)) return "Erg";
+  if (workoutName === "4x4 & Z2") return "Erg";
+  if (workoutName === "15/15s & Z2") return "Elliptical";
   if (/jog|run/i.test(text)) return "Running";
   return "";
+}
+
+function applyCardioWorkoutDefaults(workoutName, exercise) {
+  const specialZones = (
+    (workoutName === "4x4 & Z2" && /norwegian|4x4/i.test(exercise.name || "")) ||
+    (workoutName === "15/15s & Z2" && /15\s*\/\s*15/i.test(exercise.name || ""))
+  );
+  const targetModality = workoutName === "4x4 & Z2"
+    ? "Erg"
+    : workoutName === "15/15s & Z2"
+      ? "Elliptical"
+      : exercise.targetModality || "";
+
+  if (!specialZones) return { ...exercise, targetModality };
+  return {
+    ...exercise,
+    targetModality,
+    targetHrZone: "Z3-Z5",
+    trackHrZones: ["Z3", "Z4", "Z5"]
+  };
+}
+
+function ensureLiftExtras(config) {
+  const liftNames = new Set(config.schedule?.groups?.lift || []);
+  return {
+    ...config,
+    workouts: config.workouts.map((workout) => {
+      if (!liftNames.has(workout.name)) return workout;
+      const exercises = Array.isArray(workout.exercises) ? workout.exercises : [];
+      const extras = exercises.find((exercise) => /^extras$/i.test(exercise?.name || ""));
+      return {
+        ...workout,
+        exercises: [
+          ...exercises.filter((exercise) => !/^extras$/i.test(exercise?.name || "")),
+          { ...(extras || {}), name: "Extras", type: "notes" }
+        ]
+      };
+    })
+  };
 }
 
 function inferHrZone(text) {
@@ -675,7 +721,21 @@ function startSession(workoutName) {
 
 function createSessionExercise(workoutName, exercise) {
   const resolvedExercise = resolveExerciseVariant(workoutName, exercise);
+  if (resolvedExercise.type === "notes") {
+    return {
+      id: createId(),
+      name: resolvedExercise.name,
+      sourceName: exercise.name,
+      type: "notes",
+      notes: "",
+      skipped: false
+    };
+  }
+
   if (resolvedExercise.type === "cardio") {
+    const trackHrZones = Array.isArray(resolvedExercise.trackHrZones)
+      ? resolvedExercise.trackHrZones
+      : [];
     return {
       id: createId(),
       name: resolvedExercise.name,
@@ -687,6 +747,8 @@ function createSessionExercise(workoutName, exercise) {
       modality: resolvedExercise.targetModality || "",
       hrZone: resolvedExercise.targetHrZone || "",
       minutesInZone: "",
+      trackHrZones,
+      minutesByHrZone: Object.fromEntries(trackHrZones.map((zone) => [zone, ""])),
       notes: "",
       skipped: false
     };
@@ -708,9 +770,30 @@ function createSessionExercise(workoutName, exercise) {
 }
 
 function migrateSessionWorkoutName(session) {
+  const workoutName = renameWorkout(session.workoutName);
   return {
     ...session,
-    workoutName: renameWorkout(session.workoutName)
+    workoutName,
+    exercises: Array.isArray(session.exercises)
+      ? session.exercises.map((exercise) => migrateSessionExercise(workoutName, exercise))
+      : []
+  };
+}
+
+function migrateSessionExercise(workoutName, exercise) {
+  if (exercise?.type !== "cardio") return exercise;
+  const migrated = applyCardioWorkoutDefaults(workoutName, {
+    ...exercise,
+    name: migrateCardioExerciseName(workoutName, exercise.name)
+  });
+  const trackHrZones = Array.isArray(migrated.trackHrZones) ? migrated.trackHrZones : [];
+  return {
+    ...migrated,
+    modality: migrated.modality || migrated.targetModality || "",
+    minutesByHrZone: {
+      ...Object.fromEntries(trackHrZones.map((zone) => [zone, ""])),
+      ...(migrated.minutesByHrZone || {})
+    }
   };
 }
 
@@ -718,7 +801,6 @@ function createEmptySet(exercise) {
   const base = {
     reps: "",
     weight: exercise.targetWeight || "",
-    effort: "",
     notes: ""
   };
 
@@ -727,8 +809,10 @@ function createEmptySet(exercise) {
     ...base,
     leftWeight: exercise.targetWeight || "",
     leftReps: "",
+    leftNotes: "",
     rightWeight: exercise.targetWeight || "",
-    rightReps: ""
+    rightReps: "",
+    rightNotes: ""
   };
 }
 
@@ -811,6 +895,9 @@ function renderActiveSession() {
 }
 
 function renderExercise(exercise, exerciseIndex) {
+  if (exercise.type === "notes") {
+    return renderNotesExercise(exercise, exerciseIndex);
+  }
   if (exercise.type === "cardio") {
     return renderCardioExercise(exercise, exerciseIndex);
   }
@@ -852,6 +939,35 @@ function renderExercise(exercise, exerciseIndex) {
   return node;
 }
 
+function renderNotesExercise(exercise, exerciseIndex) {
+  const template = document.querySelector("#exerciseTemplate");
+  const node = template.content.firstElementChild.cloneNode(true);
+  node.classList.toggle("skipped", Boolean(exercise.skipped));
+  node.querySelector("h3").textContent = exercise.name;
+  node.querySelector(".exercise-target").textContent = exercise.skipped ? "Optional notes · skipped" : "Optional notes";
+  node.querySelector(".edit-exercise").remove();
+  node.querySelector(".exercise-edit").remove();
+  node.querySelector(".skip-exercise").addEventListener("click", () => {
+    exercise.skipped = !exercise.skipped;
+    persist();
+    renderActiveSession();
+  });
+
+  const label = document.createElement("label");
+  label.className = "notes-only-field";
+  label.innerHTML = `
+    <span>Notes</span>
+    <textarea data-field="notes" placeholder="Anything else you did in this workout">${escapeHtml(exercise.notes || "")}</textarea>
+  `;
+  label.querySelector("textarea").addEventListener("change", (event) => {
+    exercise.notes = event.target.value;
+    state.activeSession.exercises[exerciseIndex] = exercise;
+    persist();
+  });
+  node.querySelector(".sets").append(label);
+  return node;
+}
+
 function renderCardioExercise(exercise, exerciseIndex) {
   const template = document.querySelector("#exerciseTemplate");
   const node = template.content.firstElementChild.cloneNode(true);
@@ -873,19 +989,29 @@ function renderCardioExercise(exercise, exerciseIndex) {
 
   const fields = document.createElement("div");
   fields.className = "cardio-fields";
+  const zoneFields = hasHrZoneBreakdown(exercise)
+    ? exercise.trackHrZones.map((zone) => `
+      <label>
+        <span>Minutes in ${escapeHtml(zone)}</span>
+        <input data-zone="${escapeAttr(zone)}" type="number" min="0" step="0.1" inputmode="decimal" value="${escapeAttr(exercise.minutesByHrZone?.[zone] || "")}" placeholder="0">
+      </label>
+    `).join("")
+    : `
+      <label>
+        <span>HR zone</span>
+        <input data-field="hrZone" value="${escapeAttr(exercise.hrZone || "")}" placeholder="Z2">
+      </label>
+      <label>
+        <span>Minutes in zone</span>
+        <input data-field="minutesInZone" type="number" min="0" step="0.1" inputmode="decimal" value="${escapeAttr(exercise.minutesInZone || "")}" placeholder="${escapeAttr(exercise.targetMinutes || "Minutes")}">
+      </label>
+    `;
   fields.innerHTML = `
     <label>
       <span>Modality</span>
       <input data-field="modality" value="${escapeAttr(exercise.modality || "")}" placeholder="Bike, rower, run...">
     </label>
-    <label>
-      <span>HR zone</span>
-      <input data-field="hrZone" value="${escapeAttr(exercise.hrZone || "")}" placeholder="Z2">
-    </label>
-    <label>
-      <span>Minutes in zone</span>
-      <input data-field="minutesInZone" type="number" min="0" step="1" inputmode="decimal" value="${escapeAttr(exercise.minutesInZone || "")}" placeholder="${escapeAttr(exercise.targetMinutes || "Minutes")}">
-    </label>
+    ${zoneFields}
     <label class="cardio-notes">
       <span>Notes</span>
       <textarea data-field="notes" placeholder="Optional notes">${escapeHtml(exercise.notes || "")}</textarea>
@@ -894,7 +1020,12 @@ function renderCardioExercise(exercise, exerciseIndex) {
 
   fields.querySelectorAll("input, textarea").forEach((input) => {
     input.addEventListener("change", () => {
-      exercise[input.dataset.field] = input.value;
+      if (input.dataset.zone) {
+        exercise.minutesByHrZone ||= {};
+        exercise.minutesByHrZone[input.dataset.zone] = input.value;
+      } else {
+        exercise[input.dataset.field] = input.value;
+      }
       state.activeSession.exercises[exerciseIndex] = exercise;
       persist();
       renderActiveSession();
@@ -902,6 +1033,10 @@ function renderCardioExercise(exercise, exerciseIndex) {
   });
   node.querySelector(".sets").append(fields);
   return node;
+}
+
+function hasHrZoneBreakdown(exercise) {
+  return Array.isArray(exercise.trackHrZones) && exercise.trackHrZones.length > 0;
 }
 
 function renderExerciseTimer(exercise) {
@@ -968,21 +1103,23 @@ function findPreviousExerciseLog(exercise) {
 function formatSetSummary(set, units) {
   const parts = [];
   if (set.leftWeight || set.leftReps || set.rightWeight || set.rightReps) {
-    parts.push(`L ${formatSideSummary(set.leftWeight, set.leftReps, units)}`);
-    parts.push(`R ${formatSideSummary(set.rightWeight, set.rightReps, units)}`);
+    parts.push(`R ${formatSideSummary(set.rightWeight, set.rightReps, units, set.rightNotes || set.notes)}`);
+    parts.push(`L ${formatSideSummary(set.leftWeight, set.leftReps, units, set.leftNotes || set.notes)}`);
   } else {
     if (set.weight) parts.push(`${set.weight} ${units}`);
     if (set.reps) parts.push(`${set.reps} reps`);
   }
+  // Keep old effort values readable in previously logged history.
   if (set.effort) parts.push(set.effort);
-  if (set.notes) parts.push(set.notes);
+  if (set.notes && !(set.leftWeight || set.leftReps || set.rightWeight || set.rightReps)) parts.push(set.notes);
   return parts.join(" · ");
 }
 
-function formatSideSummary(weight, reps, units) {
+function formatSideSummary(weight, reps, units, notes = "") {
   const parts = [];
   if (weight) parts.push(`${weight} ${units}`);
   if (reps) parts.push(`${reps} reps`);
+  if (notes) parts.push(notes);
   return parts.join(", ") || "-";
 }
 
@@ -1030,58 +1167,56 @@ function resizeSets(exercise, desiredCount) {
 }
 
 function renderSetRow(exercise, exerciseIndex, set, setIndex, previousSet) {
-  const row = document.createElement("div");
-  row.className = exercise.isUnilateral ? "set-row unilateral" : "set-row";
-  row.classList.toggle("complete", isSetComplete(set));
-
   if (exercise.isUnilateral) {
-    row.innerHTML = `
-      <span class="set-number">${setIndex + 1}</span>
-      <div class="side-fields" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} left side">
-        <span>Left</span>
-        <input data-field="leftWeight" inputmode="decimal" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} left weight" placeholder="${escapeAttr(getLastPlaceholder(previousSet, "leftWeight", state.config.units))}" value="${escapeAttr(set.leftWeight || "")}">
-        <input data-field="leftReps" inputmode="numeric" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} left reps" placeholder="${escapeAttr(getLastPlaceholder(previousSet, "leftReps", "reps"))}" value="${escapeAttr(set.leftReps || "")}">
-      </div>
-      <div class="side-fields" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} right side">
-        <span>Right</span>
-        <input data-field="rightWeight" inputmode="decimal" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} right weight" placeholder="${escapeAttr(getLastPlaceholder(previousSet, "rightWeight", state.config.units))}" value="${escapeAttr(set.rightWeight || "")}">
-        <input data-field="rightReps" inputmode="numeric" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} right reps" placeholder="${escapeAttr(getLastPlaceholder(previousSet, "rightReps", "reps"))}" value="${escapeAttr(set.rightReps || "")}">
-      </div>
-      ${renderSetTail(exercise, set, setIndex, previousSet)}
-    `;
-
-    bindSetField(row, "leftWeight", exerciseIndex, setIndex);
-    bindSetField(row, "leftReps", exerciseIndex, setIndex, true);
-    bindSetField(row, "rightWeight", exerciseIndex, setIndex);
-    bindSetField(row, "rightReps", exerciseIndex, setIndex, true);
-  } else {
-    row.innerHTML = `
-      <span class="set-number">${setIndex + 1}</span>
-      <input data-field="weight" inputmode="decimal" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} weight" placeholder="${escapeAttr(getLastPlaceholder(previousSet, "weight", state.config.units))}" value="${escapeAttr(set.weight || "")}">
-      <input data-field="reps" inputmode="numeric" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} reps" placeholder="${escapeAttr(getLastPlaceholder(previousSet, "reps", "reps"))}" value="${escapeAttr(set.reps || "")}">
-      ${renderSetTail(exercise, set, setIndex, previousSet)}
-    `;
-
-    bindSetField(row, "weight", exerciseIndex, setIndex);
-    bindSetField(row, "reps", exerciseIndex, setIndex, true);
+    return renderUnilateralSet(exercise, exerciseIndex, set, setIndex, previousSet);
   }
 
+  const row = document.createElement("div");
+  row.className = "set-row";
+  row.classList.toggle("complete", isSetComplete(set));
+  row.innerHTML = `
+    <span class="set-number">${setIndex + 1}</span>
+    <input data-field="weight" inputmode="decimal" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} weight" placeholder="${escapeAttr(getLastPlaceholder(previousSet, "weight", state.config.units))}" value="${escapeAttr(set.weight || "")}">
+    <input data-field="reps" inputmode="numeric" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} reps" placeholder="${escapeAttr(getLastPlaceholder(previousSet, "reps", "reps"))}" value="${escapeAttr(set.reps || "")}">
+    ${renderSetNotes(exercise, set, setIndex, previousSet)}
+  `;
+
+  bindSetField(row, "weight", exerciseIndex, setIndex);
+  bindSetField(row, "reps", exerciseIndex, setIndex, true);
   bindSetField(row, "notes", exerciseIndex, setIndex);
-  const effortSelect = row.querySelector("select");
-  effortSelect.value = set.effort || "";
-  effortSelect.addEventListener("change", () => updateSet(exerciseIndex, setIndex, "effort", effortSelect.value));
   return row;
 }
 
-function renderSetTail(exercise, set, setIndex, previousSet) {
+function renderUnilateralSet(exercise, exerciseIndex, set, setIndex, previousSet) {
+  const pair = document.createElement("div");
+  pair.className = "unilateral-set-pair";
+  pair.setAttribute("aria-label", `${exercise.name} set ${setIndex + 1}`);
+  ["right", "left"].forEach((side) => {
+    const label = side === "right" ? "Right" : "Left";
+    const weightField = `${side}Weight`;
+    const repsField = `${side}Reps`;
+    const notesField = `${side}Notes`;
+    const row = document.createElement("div");
+    row.className = "set-row unilateral-side";
+    row.classList.toggle("complete", isSideComplete(set, side));
+    row.innerHTML = `
+      <span class="set-number">${setIndex + 1}${side === "right" ? "R" : "L"}</span>
+      <span class="side-label">${label}</span>
+      <input data-field="${weightField}" inputmode="decimal" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} ${side} weight" placeholder="${escapeAttr(getLastPlaceholder(previousSet, weightField, state.config.units))}" value="${escapeAttr(set[weightField] || "")}">
+      <input data-field="${repsField}" inputmode="numeric" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} ${side} reps" placeholder="${escapeAttr(getLastPlaceholder(previousSet, repsField, "reps"))}" value="${escapeAttr(set[repsField] || "")}">
+      <textarea data-field="${notesField}" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} ${side} notes" placeholder="${escapeAttr(getLastPlaceholder(previousSet, notesField, "notes"))}">${escapeHtml(set[notesField] || "")}</textarea>
+    `;
+    bindSetField(row, weightField, exerciseIndex, setIndex);
+    bindSetField(row, repsField, exerciseIndex, setIndex, true);
+    bindSetField(row, notesField, exerciseIndex, setIndex);
+    pair.append(row);
+  });
+  return pair;
+}
+
+function renderSetNotes(exercise, set, setIndex, previousSet) {
   return `
     <textarea data-field="notes" aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} notes" placeholder="${escapeAttr(getLastPlaceholder(previousSet, "notes", "notes"))}">${escapeHtml(set.notes || "")}</textarea>
-    <select aria-label="${escapeAttr(exercise.name)} set ${setIndex + 1} effort">
-      <option value="">Expected</option>
-      <option value="easy">Easy</option>
-      <option value="hard">Hard</option>
-      <option value="failed">Failed</option>
-    </select>
   `;
 }
 
@@ -1100,33 +1235,64 @@ function getLegacyPreviousValue(previousSet, field) {
   if (!previousSet) return "";
   if (field === "leftWeight" || field === "rightWeight") return previousSet.weight || "";
   if (field === "leftReps" || field === "rightReps") return previousSet.reps || "";
+  if (field === "leftNotes" || field === "rightNotes") return previousSet.notes || "";
   return "";
 }
 
 function updateSet(exerciseIndex, setIndex, field, value, maybeStartRest = false) {
   const exercise = state.activeSession.exercises[exerciseIndex];
   const set = exercise.sets[setIndex];
-  const wasComplete = isSetComplete(set);
+  const side = field.startsWith("right") ? "right" : field.startsWith("left") ? "left" : "";
+  const wasComplete = side ? isSideComplete(set, side) : isSetComplete(set);
   set[field] = value;
-  const isNowComplete = isSetComplete(set);
+  const isNowComplete = side ? isSideComplete(set, side) : isSetComplete(set);
   persist();
   renderActiveSession();
 
-  if (maybeStartRest && !wasComplete && isNowComplete && hasMoreSets(exercise, setIndex) && exercise.restSeconds > 0) {
-    startTimer(exercise.restSeconds, `${exercise.name}: set ${setIndex + 2}`, exercise.id, setIndex + 1);
+  const next = maybeStartRest && !wasComplete && isNowComplete
+    ? getNextTrackingUnit(exercise, setIndex, side)
+    : null;
+  if (next && exercise.restSeconds > 0) {
+    startTimer(exercise.restSeconds, `${exercise.name}: ${next.label}`, exercise.id, next.setIndex);
   }
 }
 
 function isSetComplete(set) {
   const hasEffortOrNotes = [set.effort, set.notes].some((value) => String(value || "").trim() !== "");
   if ("leftReps" in set || "rightReps" in set) {
-    return hasEffortOrNotes || (String(set.leftReps || "").trim() !== "" && String(set.rightReps || "").trim() !== "");
+    return hasEffortOrNotes || isSideComplete(set, "right") || isSideComplete(set, "left");
   }
   return hasEffortOrNotes || String(set.reps || "").trim() !== "";
 }
 
-function hasMoreSets(exercise, setIndex) {
-  return exercise.sets.slice(setIndex + 1).some((next) => !isSetComplete(next));
+function isSideComplete(set, side) {
+  return [set[`${side}Reps`], set[`${side}Notes`]]
+    .some((value) => String(value || "").trim() !== "");
+}
+
+function getNextTrackingUnit(exercise, setIndex, side) {
+  const candidates = [];
+  if (exercise.isUnilateral) {
+    if (side === "right") candidates.push({ setIndex, side: "left" });
+    for (let index = setIndex + 1; index < exercise.sets.length; index += 1) {
+      candidates.push({ setIndex: index, side: "right" }, { setIndex: index, side: "left" });
+    }
+  } else {
+    for (let index = setIndex + 1; index < exercise.sets.length; index += 1) {
+      candidates.push({ setIndex: index, side: "" });
+    }
+  }
+
+  const next = candidates.find((candidate) => candidate.side
+    ? !isSideComplete(exercise.sets[candidate.setIndex], candidate.side)
+    : !isSetComplete(exercise.sets[candidate.setIndex]));
+  if (!next) return null;
+  return {
+    ...next,
+    label: next.side
+      ? `set ${next.setIndex + 1} ${next.side}`
+      : `set ${next.setIndex + 1}`
+  };
 }
 
 function finishSession() {
@@ -1250,9 +1416,20 @@ function renderHistoryDetails(session) {
         return `<li><strong>${escapeHtml(exercise.name)}</strong><div><span>${escapeHtml(summary || "No cardio time logged")}</span></div></li>`;
       }
 
+      if (exercise.type === "notes") {
+        return `<li><strong>${escapeHtml(exercise.name)}</strong><div><span>${escapeHtml(exercise.notes || "No notes logged")}</span></div></li>`;
+      }
+
       const sets = exercise.sets
         .filter(isSetComplete)
         .map((set, index) => {
+          if ("leftReps" in set || "rightReps" in set) {
+            const sides = [
+              isSideComplete(set, "right") ? `<span>${index + 1}R: ${escapeHtml(formatSideSummary(set.rightWeight, set.rightReps, session.units || state.config.units, set.rightNotes || set.notes))}</span>` : "",
+              isSideComplete(set, "left") ? `<span>${index + 1}L: ${escapeHtml(formatSideSummary(set.leftWeight, set.leftReps, session.units || state.config.units, set.leftNotes || set.notes))}</span>` : ""
+            ].join("");
+            return sides || `<span>${index + 1}: ${escapeHtml(formatSetSummary(set, session.units || state.config.units))}</span>`;
+          }
           return `<span>${index + 1}: ${escapeHtml(formatSetSummary(set, session.units || state.config.units))}</span>`;
         })
         .join("");
@@ -1268,7 +1445,7 @@ function summarizeSession(session) {
   const cardioExercises = session.exercises.filter((exercise) => exercise.type === "cardio" && !exercise.skipped);
   const loggedCardio = cardioExercises.filter(isCardioComplete);
   if (cardioExercises.length) {
-    const totalMinutes = loggedCardio.reduce((total, exercise) => total + Number(exercise.minutesInZone || 0), 0);
+    const totalMinutes = loggedCardio.reduce((total, exercise) => total + getCardioMinutes(exercise), 0);
     const skipped = session.exercises.filter((exercise) => exercise.skipped).length;
     const time = totalMinutes ? `${totalMinutes} min in HR zone` : `${loggedCardio.length} cardio segment${loggedCardio.length === 1 ? "" : "s"}`;
     return `${time}${skipped ? ` · ${skipped} skipped` : ""}`;
@@ -1276,23 +1453,57 @@ function summarizeSession(session) {
 
   const sets = session.exercises
     .filter((exercise) => !exercise.skipped)
-    .reduce((total, exercise) => total + exercise.sets.filter(isSetComplete).length, 0);
+    .reduce((total, exercise) => total + countLoggedSets(exercise), 0);
   const skipped = session.exercises.filter((exercise) => exercise.skipped).length;
   return `${sets} logged set${sets === 1 ? "" : "s"}${skipped ? ` · ${skipped} skipped` : ""}`;
 }
 
 function isCardioComplete(exercise) {
-  return [exercise.minutesInZone, exercise.notes]
+  return [
+    exercise.minutesInZone,
+    exercise.notes,
+    ...Object.values(exercise.minutesByHrZone || {})
+  ]
     .some((value) => String(value || "").trim() !== "");
 }
 
 function formatCardioSummary(exercise) {
   const parts = [];
   if (exercise.modality) parts.push(exercise.modality);
-  if (exercise.hrZone) parts.push(exercise.hrZone);
-  if (exercise.minutesInZone) parts.push(`${exercise.minutesInZone} min in zone`);
+  if (hasHrZoneBreakdown(exercise)) {
+    exercise.trackHrZones.forEach((zone) => {
+      const minutes = exercise.minutesByHrZone?.[zone];
+      if (minutes) parts.push(`${minutes} min ${zone}`);
+    });
+    if (exercise.minutesInZone && !getCardioMinutesFromZones(exercise)) {
+      parts.push(`${exercise.minutesInZone} min in zone`);
+    }
+  } else {
+    if (exercise.hrZone) parts.push(exercise.hrZone);
+    if (exercise.minutesInZone) parts.push(`${exercise.minutesInZone} min in zone`);
+  }
   if (exercise.notes) parts.push(exercise.notes);
   return parts.join(" · ");
+}
+
+function getCardioMinutesFromZones(exercise) {
+  return Object.values(exercise.minutesByHrZone || {})
+    .reduce((total, minutes) => total + Number(minutes || 0), 0);
+}
+
+function getCardioMinutes(exercise) {
+  return getCardioMinutesFromZones(exercise) || Number(exercise.minutesInZone || 0);
+}
+
+function countLoggedSets(exercise) {
+  if (!Array.isArray(exercise.sets)) return 0;
+  if (!exercise.isUnilateral && !exercise.sets.some((set) => "leftReps" in set || "rightReps" in set)) {
+    return exercise.sets.filter(isSetComplete).length;
+  }
+  return exercise.sets.reduce((total, set) => {
+    const sides = Number(isSideComplete(set, "right")) + Number(isSideComplete(set, "left"));
+    return total + (sides || Number(isSetComplete(set)));
+  }, 0);
 }
 
 function getRoutineDraft() {
@@ -1449,6 +1660,7 @@ function renderRoutineExerciseFields(exercise) {
       <select data-field="type">
         <option value="strength">Sets and reps</option>
         <option value="cardio">Cardio time</option>
+        <option value="notes">Notes only</option>
         <option value="warmup">Do not track</option>
       </select>
     </label>
@@ -1456,7 +1668,7 @@ function renderRoutineExerciseFields(exercise) {
       <label><span>Target modality</span><input data-field="targetModality" value="${escapeAttr(exercise.targetModality || "")}" placeholder="Bike, run, row..."></label>
       <label><span>Target HR zone</span><input data-field="targetHrZone" value="${escapeAttr(exercise.targetHrZone || "")}" placeholder="Z2"></label>
       <label><span>Target minutes</span><input data-field="targetMinutes" value="${escapeAttr(exercise.targetMinutes || "")}" inputmode="decimal"></label>
-    ` : `
+    ` : type === "notes" ? "" : `
       <label><span>${type === "warmup" ? "Instructions" : "Target reps"}</span><input data-field="targetReps" value="${escapeAttr(exercise.targetReps || "")}"></label>
       ${type === "strength" ? `
         <label><span>Sets</span><input data-field="sets" type="number" min="1" max="12" value="${Number(exercise.sets || 1)}"></label>
@@ -1491,6 +1703,7 @@ function renderRoutineExerciseFields(exercise) {
 
 function getRoutineExerciseType(exercise) {
   if (exercise.type === "cardio") return "cardio";
+  if (exercise.type === "notes") return "notes";
   if (exercise.trackProgress === false) return "warmup";
   return "strength";
 }
@@ -1500,6 +1713,8 @@ function replaceRoutineExerciseType(exercise, type) {
   Object.keys(exercise).forEach((key) => delete exercise[key]);
   if (type === "cardio") {
     Object.assign(exercise, { name, type: "cardio", targetModality: "", targetHrZone: "", targetMinutes: "" });
+  } else if (type === "notes") {
+    Object.assign(exercise, { name, type: "notes" });
   } else if (type === "warmup") {
     Object.assign(exercise, { name, sets: 0, targetReps: "", targetWeight: "", restSeconds: 0, trackProgress: false });
   } else {
