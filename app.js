@@ -1264,7 +1264,13 @@ function updateSet(exerciseIndex, setIndex, field, value, maybeStartRest = false
   const set = exercise.sets[setIndex];
   const side = field.startsWith("right") ? "right" : field.startsWith("left") ? "left" : "";
   const wasComplete = side ? isSideComplete(set, side) : isSetComplete(set);
+  const shouldPropagateWeight = shouldPropagateFirstSetWeight(exercise, setIndex, field, value);
   set[field] = value;
+  if (shouldPropagateWeight) {
+    exercise.sets.slice(1).forEach((followingSet) => {
+      if (!hasEnteredValue(followingSet[field])) followingSet[field] = value;
+    });
+  }
   const isNowComplete = side ? isSideComplete(set, side) : isSetComplete(set);
   persist();
   renderActiveSession();
@@ -1275,6 +1281,24 @@ function updateSet(exerciseIndex, setIndex, field, value, maybeStartRest = false
   if (next && exercise.restSeconds > 0) {
     startTimer(exercise.restSeconds, `${exercise.name}: ${next.label}`, exercise.id, next.setIndex);
   }
+}
+
+function shouldPropagateFirstSetWeight(exercise, setIndex, field, value) {
+  if (setIndex !== 0 || !["weight", "leftWeight", "rightWeight"].includes(field)) return false;
+  if (!hasEnteredValue(value) || exercise.sets.some((set) => hasEnteredValue(set[field]))) return false;
+
+  const previousExercise = findPreviousExerciseLog(exercise)?.exercise;
+  if (!previousExercise?.sets?.length) return false;
+
+  const previousWeights = previousExercise.sets.map((set) => {
+    const fieldValue = set?.[field];
+    return hasEnteredValue(fieldValue) ? String(fieldValue) : String(getLegacyPreviousValue(set, field) || "");
+  });
+  return previousWeights.every((weight) => hasEnteredValue(weight) && weight === previousWeights[0]);
+}
+
+function hasEnteredValue(value) {
+  return String(value ?? "") !== "";
 }
 
 function isSetComplete(set) {
