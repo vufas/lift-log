@@ -1,4 +1,5 @@
 const STORAGE_KEY = "liftLogState.v1";
+const STATE_VERSION = 3;
 
 const defaultConfig = {
   units: "lb",
@@ -7,7 +8,7 @@ const defaultConfig = {
     mode: "alternatingGroups",
     groupOrder: ["lift", "cardio"],
     groups: {
-      lift: ["Upper A", "Lower A", "Upper B", "Lower B"],
+      lift: ["Upper A", "Lower A", "Upper B", "Lower B", "Lower Cons"],
       cardio: ["Z2", "4x4 & Z2", "15/15s & Z2"]
     }
   },
@@ -21,10 +22,10 @@ const defaultConfig = {
       name: "Lower A",
       exercises: [
         { name: "Mobility warmup", sets: 0, targetReps: "90/90 Hip Rotations - 30s/side; World's Greatest Stretch - 2 reps/side, slow; Ankle Dorsiflexion Rock-backs - 8-10 reps/side; Glute Bridge with Hold - 8-10 reps, 2s squeeze; Bodyweight Squat with Pause & Hip Opener - 5 reps", targetWeight: "", restSeconds: 0, trackProgress: false },
-        { name: "RDL", sets: 3, targetReps: "8-10", targetWeight: "", restSeconds: 120 },
+        { name: "Trap bar RDL", sets: 3, targetReps: "8-10", targetWeight: "", restSeconds: 120 },
         { name: "Leg Press", sets: 3, targetReps: "8-12", targetWeight: "", restSeconds: 120 },
         { name: "Leg extension", sets: 2, targetReps: "12-15", targetWeight: "", restSeconds: 75 },
-        { name: "Hip abduction (open)", sets: 2, targetReps: "12-15", targetWeight: "", restSeconds: 75 },
+        { name: "Hip adduction (close)", sets: 2, targetReps: "12-15", targetWeight: "", restSeconds: 75 },
         { name: "Standing calf", sets: 3, targetReps: "12-20", targetWeight: "", restSeconds: 75 },
         { name: "Hanging leg raise", sets: 2, targetReps: "AMRAP (goal: 20 clean)", targetWeight: "", restSeconds: 60 },
         { name: "Pallof press", sets: 2, targetReps: "", targetWeight: "", restSeconds: 60, isUnilateral: true },
@@ -34,18 +35,11 @@ const defaultConfig = {
     {
       name: "Upper A",
       exercises: [
-        { name: "Mobility warmup", sets: 0, targetReps: "Scapular Wall Slides - 6-8 reps; Banded Shoulder Dislocates / PVC Pass-throughs - 8-10 reps; Thoracic Spine Open Books - 5 reps/side; Scapular Overhead Shrugs with light KB superset with Kelso shrugs, same weight; Banded Face Pulls - 12-15 reps", targetWeight: "", restSeconds: 0, trackProgress: false },
+        { name: "Mobility warmup", sets: 0, targetReps: "Scapular Wall Slides - 6-8 reps; Banded Shoulder Dislocates / PVC Pass-throughs - 8-10 reps; Thoracic Spine Open Books - 5 reps/side; Scapular Overhead Shrugs with light KB superset with Kelso shrugs, same weight; Banded Face Pulls - 12-15 reps; straight arm lat pulldown", targetWeight: "", restSeconds: 0, trackProgress: false },
         { name: "Neutral pull-ups", sets: 3, targetReps: "6-10", targetWeight: "", restSeconds: 120 },
         { name: "Dips", sets: 3, targetReps: "8-12", targetWeight: "", restSeconds: 120 },
         { name: "Cable row", sets: 2, targetReps: "8-10", targetWeight: "", restSeconds: 90 },
-        {
-          name: "Shoulder variant",
-          alternate: "perWorkout",
-          variants: [
-            { name: "OHP", sets: 2, targetReps: "8-12", targetWeight: "", restSeconds: 90 },
-            { name: "Lu lateral raise", sets: 2, targetReps: "8-12", targetWeight: "", restSeconds: 90 }
-          ]
-        },
+        { name: "OHP", sets: 2, targetReps: "8-12", targetWeight: "", restSeconds: 90 },
         { name: "Reverse preacher curl", sets: 2, targetReps: "12-15", targetWeight: "", restSeconds: 75 },
         { name: "Cable external rotation", sets: 1, targetReps: "15-20", targetWeight: "", restSeconds: 60, isUnilateral: true },
         { name: "Extras", type: "notes" }
@@ -56,8 +50,7 @@ const defaultConfig = {
       exercises: [
         { name: "Mobility warmup", sets: 0, targetReps: "Dynamic Hamstring Sweep Stretch - 5 reps/side; Hip Airplanes - 3-4 reps/side; Cossack Squat Side Shifts - 6 reps total; Cat-Cow into Neutral Spine Holds - 30s flow; Good Morning with PVC / Empty Bar - 6-8 reps", targetWeight: "", restSeconds: 0, trackProgress: false },
         { name: "BSS", sets: 2, targetReps: "8-10", targetWeight: "", restSeconds: 90, isUnilateral: true },
-        { name: "PJR Pullover", sets: 2, targetReps: "10-12", targetWeight: "", restSeconds: 90 },
-        { name: "Seated calf", sets: 3, targetReps: "", targetWeight: "", restSeconds: 75 },
+        { name: "Standing calf", sets: 3, targetReps: "12-15", targetWeight: "", restSeconds: 75 },
         {
           name: "KB swing variant",
           alternate: "perWorkout",
@@ -68,18 +61,34 @@ const defaultConfig = {
         },
         { name: "Dragon Flag", sets: 2, targetReps: "AMRAP", targetWeight: "", restSeconds: 60 },
         { name: "Seated Leg Curl", sets: 2, targetReps: "12-15", targetWeight: "", restSeconds: 75 },
-        { name: "Hip adduction (close)", sets: 2, targetReps: "12-15", targetWeight: "", restSeconds: 75 },
+        { name: "Hip abduction (open)", sets: 2, targetReps: "12-15", targetWeight: "", restSeconds: 75 },
         { name: "Extras", type: "notes" }
+      ]
+    },
+    {
+      name: "Lower Cons",
+      excludeFromSchedule: true,
+      exercises: [
+        { name: "Mobility warmup", sets: 0, targetReps: "90/90 Hip Rotations - 30s/side; World's Greatest Stretch - 2 reps/side, slow; Ankle Dorsiflexion Rock-backs - 8-10 reps/side; Glute Bridge with Hold - 8-10 reps, 2s squeeze; Bodyweight Squat with Pause & Hip Opener - 5 reps", targetWeight: "", restSeconds: 0, trackProgress: false },
+        { name: "Trap bar RDL", sets: 2, targetReps: "8-10", targetWeight: "", restSeconds: 120 },
+        { name: "BSS", sets: 2, targetReps: "8-10", targetWeight: "", restSeconds: 90, isUnilateral: true },
+        { name: "Leg extension", sets: 2, targetReps: "12-15", targetWeight: "", restSeconds: 75 },
+        { name: "Seated Leg Curl", sets: 2, targetReps: "12-15", targetWeight: "", restSeconds: 75 },
+        { name: "Hip adduction (close)", sets: 2, targetReps: "12-15", targetWeight: "", restSeconds: 75 },
+        { name: "Standing calf", sets: 3, targetReps: "12-20", targetWeight: "", restSeconds: 75 },
+        { name: "Hanging leg raise", sets: 2, targetReps: "AMRAP (goal: 20 clean)", targetWeight: "", restSeconds: 60 },
+        { name: "Pallof press", sets: 2, targetReps: "", targetWeight: "", restSeconds: 60, isUnilateral: true }
       ]
     },
     {
       name: "Upper B",
       exercises: [
-        { name: "Mobility warmup", sets: 0, targetReps: "Foam Roller T-spine Extensions - 5 reps; Banded Lat Stretch - 20s hold/side; Arm Circles - 8 reps each direction; Serratus Wall Slide / Lift-off - 6-8 reps; Band Pull-aparts - 12-15 reps", targetWeight: "", restSeconds: 0, trackProgress: false },
+        { name: "Mobility warmup", sets: 0, targetReps: "Foam Roller T-spine Extensions - 5 reps; Banded Lat Stretch - 20s hold/side; Arm Circles - 8 reps each direction; Serratus Wall Slide / Lift-off - 6-8 reps; Band Pull-aparts - 12-15 reps, straight arm lat pulldowns", targetWeight: "", restSeconds: 0, trackProgress: false },
         { name: "Chin-ups", sets: 3, targetReps: "6-10", targetWeight: "", restSeconds: 120 },
         { name: "30 deg DB incline press", sets: 3, targetReps: "8-12", targetWeight: "", restSeconds: 120 },
-        { name: "Chest fly", sets: 2, targetReps: "8-10", targetWeight: "", restSeconds: 90 },
-        { name: "Face pulls", sets: 2, targetReps: "12-15", targetWeight: "", restSeconds: 75 },
+        { name: "Cable row", sets: 2, targetReps: "12-15", targetWeight: "", restSeconds: 90 },
+        { name: "PJR Pullover", sets: 2, targetReps: "10-12", targetWeight: "", restSeconds: 90 },
+        { name: "Lu Lateral Raise", sets: 2, targetReps: "8-12", targetWeight: "", restSeconds: 90 },
         { name: "Incline Y-raise", sets: 1, targetReps: "8-12", targetWeight: "", restSeconds: 60 },
         {
           name: "Carry variant",
@@ -95,22 +104,24 @@ const defaultConfig = {
     {
       name: "4x4 & Z2",
       exercises: [
-        { name: "Warmup", type: "cardio", targetModality: "Erg", targetHrZone: "50-60% HR max", targetMinutes: "5" },
-        { name: "Norwegian 4x4", type: "cardio", targetModality: "Erg", targetHrZone: "Z3-Z5", targetMinutes: "16", trackHrZones: ["Z3", "Z4", "Z5"] },
-        { name: "Zone 2", type: "cardio", targetModality: "Erg", targetHrZone: "Z2", targetMinutes: "15", fixedHrZone: "Z2" }
+        { name: "Warmup: Easy ~50-60% effort", type: "cardio", targetModality: "Erg", targetHrZone: "50-60% HR max", targetMinutes: "5" },
+        { name: "Norwegian 4x4", type: "cardio", targetModality: "Erg", targetHrZone: "Z3-Z5", targetMinutes: "28", trackHrZones: ["Z3", "Z4", "Z5"] },
+        { name: "Zone 2 (~60-70% HR max)", type: "cardio", targetModality: "Erg", targetHrZone: "Z2", targetMinutes: "15-30" }
       ]
     },
     {
       name: "Z2",
       exercises: [
-        { name: "Z2 Cardio", type: "cardio", targetModality: "", targetHrZone: "Z2", targetMinutes: "60-75" }
+        { name: "Warmup", type: "cardio", targetModality: "Elliptical", targetHrZone: "Z1", targetMinutes: "" },
+        { name: "Z2 Cardio", type: "cardio", targetModality: "Elliptical", targetHrZone: "Z2", targetMinutes: "60-75" }
       ]
     },
     {
       name: "15/15s & Z2",
       exercises: [
-        { name: "15/15s", type: "cardio", targetModality: "Elliptical", targetHrZone: "Z3-Z5", targetMinutes: "25-30", trackHrZones: ["Z3", "Z4", "Z5"] },
-        { name: "Zone 2", type: "cardio", targetModality: "Elliptical", targetHrZone: "Z2", targetMinutes: "30", fixedHrZone: "Z2" }
+        { name: "Warmup", type: "cardio", targetModality: "Elliptical", targetHrZone: "Z1", targetMinutes: "5" },
+        { name: "15/15s", type: "cardio", targetModality: "Elliptical", targetHrZone: "Z3-Z5", targetMinutes: "15-20", trackHrZones: ["Z3", "Z4", "Z5"] },
+        { name: "Zone 2", type: "cardio", targetModality: "Elliptical", targetHrZone: "Z2", targetMinutes: "35-40", fixedHrZone: "Z2" }
       ]
     }
   ]
@@ -224,7 +235,7 @@ function loadState() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) {
     return {
-      version: 1,
+      version: STATE_VERSION,
       config: structuredClone(defaultConfig),
       history: [],
       activeSession: null,
@@ -236,10 +247,11 @@ function loadState() {
 
   try {
     const parsed = JSON.parse(raw);
-    const config = normalizeConfig(parsed.config || defaultConfig);
+    const sourceConfig = migrateConfigToLatest(parsed.config || defaultConfig, Number(parsed.version || 1));
+    const config = normalizeConfig(sourceConfig);
     const history = Array.isArray(parsed.history) ? parsed.history.map(migrateSessionWorkoutName) : [];
     return {
-      version: 1,
+      version: STATE_VERSION,
       config,
       history,
       activeSession: parsed.activeSession ? migrateSessionWorkoutName(parsed.activeSession) : null,
@@ -249,7 +261,7 @@ function loadState() {
     };
   } catch {
     return {
-      version: 1,
+      version: STATE_VERSION,
       config: structuredClone(defaultConfig),
       history: [],
       activeSession: null,
@@ -258,6 +270,28 @@ function loadState() {
       backupReminderDismissedAt: ""
     };
   }
+}
+
+function migrateConfigToLatest(config, fromVersion) {
+  return fromVersion < 3 ? migrateConfigV3(config) : structuredClone(config);
+}
+
+function migrateConfigV3(config) {
+  return {
+    ...config,
+    cycleOrder: structuredClone(defaultConfig.cycleOrder),
+    schedule: structuredClone(defaultConfig.schedule),
+    workouts: structuredClone(defaultConfig.workouts)
+  };
+}
+
+function renameRdlExercise(exercise) {
+  if (!isRdlExercise(exercise)) return exercise;
+  return { ...exercise, name: "Trap bar RDL" };
+}
+
+function isRdlExercise(exercise) {
+  return ["rdl", "trap bar rdl"].includes(normalizeExerciseName(exercise?.name));
 }
 
 function normalizeConfig(config) {
@@ -410,7 +444,7 @@ function ensureLiftExtras(config) {
   return {
     ...config,
     workouts: config.workouts.map((workout) => {
-      if (!liftNames.has(workout.name)) return workout;
+      if (!liftNames.has(workout.name) || workout.excludeFromSchedule) return workout;
       const exercises = Array.isArray(workout.exercises) ? workout.exercises : [];
       const extras = exercises.find((exercise) => /^extras$/i.test(exercise?.name || ""));
       return {
@@ -594,7 +628,7 @@ function renderBackupReminder() {
     <div>
       <p class="section-label">Backup</p>
       <h2>Workout not backed up</h2>
-      <p class="muted">Latest: ${escapeHtml(latest.workoutName)} on ${escapeHtml(formatDateTime(latest.completedAt || latest.startedAt))}</p>
+      <p class="muted">Latest: ${escapeHtml(latest.workoutName)} on ${escapeHtml(formatDateTime(getSessionWorkoutTime(latest)))}</p>
     </div>
     <div class="session-actions">
       <button class="secondary-button" type="button" data-action="dismiss-backup">Later</button>
@@ -639,7 +673,6 @@ function getNextScheduledWorkoutName(sourceState) {
   const groupOrder = Array.isArray(schedule.groupOrder) && schedule.groupOrder.length
     ? schedule.groupOrder
     : [];
-  const groups = schedule.groups || {};
   if (!groupOrder.length) return "";
 
   const history = Array.isArray(sourceState.history) ? sourceState.history : [];
@@ -647,7 +680,7 @@ function getNextScheduledWorkoutName(sourceState) {
   const nextGroup = lastGroup
     ? groupOrder[(groupOrder.indexOf(lastGroup) + 1) % groupOrder.length]
     : groupOrder[0];
-  const candidates = groups[nextGroup] || [];
+  const candidates = getScheduledGroupNames(nextGroup, config);
   if (!candidates.length) return "";
 
   return getLeastRecentlyCompletedWorkout(candidates, history);
@@ -662,7 +695,7 @@ function getLeastRecentlyCompletedWorkout(candidates, history) {
   const lastSeen = new Map(candidates.map((name) => [name, 0]));
   history.forEach((session) => {
     if (lastSeen.has(session.workoutName) && lastSeen.get(session.workoutName) === 0) {
-      lastSeen.set(session.workoutName, new Date(session.completedAt || session.startedAt || 0).getTime() || 1);
+      lastSeen.set(session.workoutName, getSessionTimestamp(session) || 1);
     }
   });
 
@@ -674,8 +707,8 @@ function getLeastRecentlyCompletedWorkout(candidates, history) {
 function getCycleStatusText() {
   const schedule = state.config.schedule;
   if (schedule?.mode === "alternatingGroups") {
-    const liftNames = schedule.groups?.lift || [];
-    const cardioNames = schedule.groups?.cardio || [];
+    const liftNames = getScheduledGroupNames("lift");
+    const cardioNames = getScheduledGroupNames("cardio");
     const liftCount = countCompletedWorkouts(liftNames);
     const cardioCount = countCompletedWorkouts(cardioNames);
     const liftCycle = Math.floor(liftCount / Math.max(1, liftNames.length)) + 1;
@@ -693,13 +726,13 @@ function getCycleStatusText() {
 function getLastCompletedText() {
   const latest = state.history[0];
   if (!latest) return "No workouts logged yet";
-  return `Last: ${latest.workoutName} on ${formatDate(latest.completedAt)}`;
+  return `Last: ${latest.workoutName} on ${formatDate(getSessionWorkoutTime(latest))}`;
 }
 
 function getDeloadSuggestion() {
   const deload = state.config.deload;
   if (!deload?.enabled) return "";
-  const liftNames = state.config.schedule?.groups?.lift || [];
+  const liftNames = getScheduledGroupNames("lift");
   const completedLiftWorkouts = liftNames.length ? countCompletedWorkouts(liftNames) : state.history.length;
   const cycleSize = liftNames.length || state.config.cycleOrder.length || 1;
   const nextCycle = Math.floor(completedLiftWorkouts / Math.max(1, cycleSize)) + 1;
@@ -707,6 +740,11 @@ function getDeloadSuggestion() {
     return `deload reminder: reduce load ${deload.targetReductionPercent}%`;
   }
   return "";
+}
+
+function getScheduledGroupNames(groupName, config = state.config) {
+  const names = config.schedule?.groups?.[groupName] || [];
+  return names.filter((name) => !config.workouts?.find((workout) => workout.name === name)?.excludeFromSchedule);
 }
 
 function countCompletedWorkouts(names) {
@@ -794,10 +832,16 @@ function migrateSessionWorkoutName(session) {
 }
 
 function migrateSessionExercise(workoutName, exercise) {
-  if (exercise?.type !== "cardio") return exercise;
+  let renamedExercise = ["Lower A", "Lower Cons"].includes(workoutName)
+    ? renameRdlExercise(exercise)
+    : exercise;
+  if (workoutName === "Upper B" && normalizeExerciseName(renamedExercise?.name) === "cable rows") {
+    renamedExercise = { ...renamedExercise, name: "Cable row" };
+  }
+  if (renamedExercise?.type !== "cardio") return renamedExercise;
   const migrated = applyCardioWorkoutDefaults(workoutName, {
-    ...exercise,
-    name: migrateCardioExerciseName(workoutName, exercise.name)
+    ...renamedExercise,
+    name: migrateCardioExerciseName(workoutName, renamedExercise.name)
   });
   const trackHrZones = Array.isArray(migrated.trackHrZones) ? migrated.trackHrZones : [];
   return {
@@ -1109,15 +1153,23 @@ function getExerciseTargetText(exercise) {
 }
 
 function findPreviousExerciseLog(exercise) {
+  let latest = null;
   for (const session of state.history) {
-    if (session.workoutName !== state.activeSession.workoutName) continue;
-
-    const previousExercise = session.exercises?.find((item) => item.name === exercise.name);
+    const previousExercise = session.exercises?.find((item) =>
+      item.type !== "cardio" &&
+      item.type !== "notes" &&
+      normalizeExerciseName(item.name) === normalizeExerciseName(exercise.name)
+    );
     if (previousExercise?.sets?.some(isSetComplete)) {
-      return { session, exercise: previousExercise };
+      const candidate = { session, exercise: previousExercise };
+      if (!latest || getSessionTimestamp(session) > getSessionTimestamp(latest.session)) latest = candidate;
     }
   }
-  return null;
+  return latest;
+}
+
+function normalizeExerciseName(name) {
+  return String(name || "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 function formatSetSummary(set, units) {
@@ -1441,7 +1493,7 @@ function renderHistory() {
     item.className = "history-item";
     item.innerHTML = `
       <h3>${escapeHtml(session.workoutName)}</h3>
-      <p>${formatDateTime(session.completedAt)} · ${summarizeSession(session)}</p>
+      <p>${formatDateTime(getSessionWorkoutTime(session))} · ${summarizeSession(session)}</p>
       ${renderHistoryDetails(session)}
     `;
     dom.historyList.append(item);
@@ -1951,8 +2003,11 @@ function importBackup(event) {
     try {
       const parsed = JSON.parse(String(reader.result));
       const importedState = parsed.state || parsed;
-      state.version = 1;
-      state.config = normalizeConfig(importedState.config || defaultConfig);
+      state.version = STATE_VERSION;
+      state.config = normalizeConfig(migrateConfigToLatest(
+        importedState.config || defaultConfig,
+        Number(importedState.version || 1)
+      ));
       state.history = Array.isArray(importedState.history) ? importedState.history.map(migrateSessionWorkoutName) : [];
       state.activeSession = importedState.activeSession ? migrateSessionWorkoutName(importedState.activeSession) : null;
       state.selectedWorkoutName = renameWorkout(importedState.selectedWorkoutName) || getNextWorkoutName(state);
@@ -1989,6 +2044,14 @@ function registerServiceWorker() {
 
 function formatDate(iso) {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(iso));
+}
+
+function getSessionWorkoutTime(session) {
+  return session?.startedAt || session?.completedAt || "";
+}
+
+function getSessionTimestamp(session) {
+  return new Date(getSessionWorkoutTime(session) || 0).getTime() || 0;
 }
 
 function formatDateTime(iso) {
